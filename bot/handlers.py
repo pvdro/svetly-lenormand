@@ -22,6 +22,7 @@ from bot.keyboards import after_spread, main_menu, open_app_inline, premium_inli
 from bot.llm import build_asc_day_prompt, build_spread_prompt, chat, fallback_spread_text
 from bot.premium import FREE_AI_READINGS_PER_DAY, PLANS, feature_allowed, plan_by_payload
 from bot.spreads import SPREADS
+from bot.tarot import TAROT_SPREADS, draw_tarot, tarot_to_dict
 from bot.texts import ASK_BIRTH, HELP, HOW_MONEY, NO_APP, PREMIUM_INFO, WELCOME
 
 logger = logging.getLogger(__name__)
@@ -42,6 +43,10 @@ BUTTON_TO_SPREAD = {
     "🌈 Путь": "path",
     "📅 Неделя": "week",
     "🗓️ Месяц": "month",
+    "🃏 Таро: карта дня": "t_day",
+    "🃏 Таро: три карты": "t_three",
+    "🃏 Таро: любовь": "t_love",
+    "🃏 Таро: путь": "t_path",
 }
 
 
@@ -92,18 +97,35 @@ async def _run_spread(message: Message, spread_id: str, question: str | None = N
     uid = user.id
     store.upsert_user(uid, user.username, user.first_name)
 
-    if spread_id not in SPREADS:
-        await message.answer("Расклад не найден.", reply_markup=main_menu())
-        return
+    is_tarot = spread_id.startswith("t_")
+    if is_tarot:
+        if spread_id not in TAROT_SPREADS:
+            await message.answer("Расклад не найден.", reply_markup=main_menu())
+            return
+        meta = TAROT_SPREADS[spread_id]
+        spread_title = meta["title"]
+        spread_emoji = meta["emoji"]
+        spread_blurb = meta["blurb"]
+        n_cards = meta["n"]
+        positions = list(meta["positions"])
+    else:
+        if spread_id not in SPREADS:
+            await message.answer("Расклад не найден.", reply_markup=main_menu())
+            return
+        spread = SPREADS[spread_id]
+        spread_title = spread.title
+        spread_emoji = spread.emoji
+        spread_blurb = spread.blurb
+        n_cards = spread.n_cards
+        positions = list(spread.positions)
 
-    spread = SPREADS[spread_id]
     prem = store.is_premium(uid)
     gate = feature_allowed(spread_id, is_premium=prem, free_ai_left=1)
     if not gate["ok"]:
         await message.answer(gate["message"], reply_markup=premium_inline())
         return
 
-    # day once
+    # day once (lenormand)
     if spread_id == "day":
         existing = store.get_day_reading(uid, "day")
         if existing and existing.get("ai_text"):
@@ -114,19 +136,33 @@ async def _run_spread(message: Message, spread_id: str, question: str | None = N
                 reply_markup=after_spread("day"),
             )
             return
+    if spread_id == "t_day":
+        existing = store.get_day_reading(uid, "t_day")
+        if existing and existing.get("ai_text"):
+            await _send_long(
+                message,
+                f"🃏 **Карта дня (Таро)** (уже на сегодня)\n\n{existing['ai_text']}",
+                parse_mode="Markdown",
+                reply_markup=after_spread("t_day"),
+            )
+            return
 
     await message.answer("🕊️ Тасую карты и готовлю прогноз…")
 
-    cards = draw(spread.n_cards)
-    cards_d = _cards_to_dicts(cards)
+    if is_tarot:
+        cards_d = [tarot_to_dict(c) for c in draw_tarot(n_cards)]
+    else:
+        cards_d = _cards_to_dicts(draw(n_cards))
 
-    # format cards
-    lines = [f"{spread.emoji} **{spread.title}**\n_{spread.blurb}_\n"]
+    lines = [f"{spread_emoji} **{spread_title}**\n_{spread_blurb}_\n"]
     if question:
         lines.append(f"Вопрос: _{question}_\n")
     for i, c in enumerate(cards_d):
-        pos = spread.positions[i] if i < len(spread.positions) else f"Карта {i+1}"
-        lines.append(f"**{pos}**\n{c['emoji']} **{c['number']}. {c['name']}**\n_{c['keywords']}_\n{c['general']}\n")
+        pos = positions[i] if i < len(positions) else f"Карта {i+1}"
+        body = c.get("upright") or c.get("general") or ""
+        lines.append(
+            f"**{pos}**\n{c['emoji']} **{c['name']}**\n_{c['keywords']}_\n{body}\n"
+        )
 
     used = store.count_ai_today(uid)
     left = 999 if prem else max(0, FREE_AI_READINGS_PER_DAY - used)
@@ -134,12 +170,14 @@ async def _run_spread(message: Message, spread_id: str, question: str | None = N
 
     ai_text = None
     if agate["ok"]:
+        system = "tarot" if is_tarot else "lenormand"
         prompt = build_spread_prompt(
-            spread_title=spread.title,
-            spread_blurb=spread.blurb,
+            spread_title=spread_title,
+            spread_blurb=spread_blurb + (f" Система: Таро Райдера–Уэйта." if is_tarot else " Система: Ленорман."),
             cards=cards_d,
-            positions=list(spread.positions),
+            positions=positions,
             question=question,
+            extra="Пиши только по-русски, без англицизмов. Тон светлый и бережный.",
         )
         try:
             ai_text, provider, model = chat(prompt)
@@ -147,14 +185,23 @@ async def _run_spread(message: Message, spread_id: str, question: str | None = N
                 store.inc_ai_today(uid)
             lines.append(f"\n✨ **Живой прогноз**\n{ai_text}")
         except Exception as e:
-            ai_text = fallback_spread_text(cards_d, spread.title)
+            ai_text = fallback_spread_text(cards_d, spread_title)
             lines.append(f"\n✨ **Прогноз**\n{ai_text}\n\n_(Краткий режим: {e})_")
     else:
         lines.append(f"\n_{agate['message']}_")
         ai_text = "\n".join(lines)
 
     text = "\n".join(lines)
-    store.save_reading(uid, spread_id, spread.title, question, cards_d, ai_text or text, {})
+    store.save_reading(
+        uid,
+        spread_id,
+        spread_title,
+        question,
+        cards_d,
+        ai_text or text,
+        {"system": "tarot" if is_tarot else "lenormand"},
+        day_key=store.today_key() if spread_id in ("day", "t_day") else store.today_key(),
+    )
     await _send_long(message, text, parse_mode="Markdown", reply_markup=after_spread(spread_id))
 
 

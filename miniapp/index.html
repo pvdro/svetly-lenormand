@@ -61,11 +61,16 @@
 
       <button type="button" class="link-row" id="btn-day">
         <span>☀️</span>
-        <span>Карта дня (1× в сутки)</span>
+        <span>Карта дня · Ленорман (1× в сутки)</span>
+        <span class="chev">›</span>
+      </button>
+      <button type="button" class="link-row" id="btn-tarot-day">
+        <span>🃏</span>
+        <span>Карта дня · Таро Райдера–Уэйта</span>
         <span class="chev">›</span>
       </button>
 
-      <h3 class="section-title">Расклады</h3>
+      <h3 class="section-title">Расклады · Ленорман и Таро</h3>
       <div class="question-box">
         <label class="field">
           <span>Ваш вопрос (необязательно)</span>
@@ -208,6 +213,10 @@
     <section id="view-library" class="view">
       <button type="button" class="back-btn" data-go="home">← Назад</button>
       <h2>Справочник</h2>
+      <div class="lib-tabs" id="lib-tabs">
+        <button type="button" class="lib-tab active" data-lib="lenormand">Ленорман (36)</button>
+        <button type="button" class="lib-tab" data-lib="tarot">Таро (78)</button>
+      </div>
       <div class="lib-grid" id="lib-grid"></div>
     </section>
 
@@ -222,7 +231,7 @@
       <button type="button" class="back-btn" data-go="home">← Назад</button>
       <h2>С теплом</h2>
       <div class="about-card">
-        <p>Карты Ленорман, восходящий знак и живой тёплый прогноз. Светлый тон, без страшилок.</p>
+        <p>Ленорман и Таро Райдера–Уэйта, восходящий знак и живой тёплый прогноз. Светлый тон, без страшилок.</p>
         <ul>
           <li>Карта дня и день по восходящему — раз в сутки</li>
           <li>Живой прогноз: бесплатно 3 в сутки · полный доступ без ограничения</li>

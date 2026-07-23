@@ -259,6 +259,37 @@ h3.section-title {
   grid-template-columns: 1fr 1fr;
   gap: 12px;
 }
+.spread-group-title {
+  grid-column: 1 / -1;
+  margin: 8px 0 0;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.lib-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0 16px;
+}
+.lib-tab {
+  flex: 1;
+  border: 0;
+  border-radius: 999px;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  background: rgba(255,255,255,0.55);
+  color: var(--muted);
+  cursor: pointer;
+}
+.lib-tab.active {
+  background: linear-gradient(135deg, #f3d9b8, #e8c4f0);
+  color: var(--ink);
+  box-shadow: var(--shadow-soft);
+}
 .spread-tile {
   border: 0;
   border-radius: var(--radius);

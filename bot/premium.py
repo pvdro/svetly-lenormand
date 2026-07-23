@@ -15,6 +15,9 @@ FREE_FEATURES = {
     "situation",
     "work",
     "yesno",
+    "t_day",
+    "t_three",
+    "t_love",
 }
 
 PREMIUM_ONLY = {
@@ -23,6 +26,8 @@ PREMIUM_ONLY = {
     "month",
     "compat",
     "deep",
+    "t_celtic",
+    "t_path",
 }
 
 PLANS: dict[str, dict[str, Any]] = {

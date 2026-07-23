@@ -25,6 +25,8 @@ def main_menu() -> ReplyKeyboardMarkup:
         [KeyboardButton(text="✨ Три карты"), KeyboardButton(text="💗 Любовь")],
         [KeyboardButton(text="🌿 Ситуация"), KeyboardButton(text="🌻 Дело")],
         [KeyboardButton(text="🔮 Да / Нет"), KeyboardButton(text="🌈 Путь")],
+        [KeyboardButton(text="🃏 Таро: карта дня"), KeyboardButton(text="🃏 Таро: три карты")],
+        [KeyboardButton(text="🃏 Таро: любовь"), KeyboardButton(text="🃏 Таро: путь")],
         [KeyboardButton(text="📅 Неделя"), KeyboardButton(text="🗓️ Месяц")],
         [KeyboardButton(text="⭐ Полный доступ"), KeyboardButton(text="ℹ️ Помощь")],
     ]

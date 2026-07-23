@@ -232,12 +232,17 @@ def build_spread_prompt(
     ]
     if question:
         lines.append(f"Вопрос пользователя: {question}")
-    lines.append("Выпавшие карты Ленорман:")
+    is_tarot = any(c.get("system") == "tarot" for c in cards) or (
+        "Таро" in (spread_blurb or "") or "Райдера" in (spread_blurb or "")
+    )
+    lines.append("Выпавшие карты Таро Райдера–Уэйта:" if is_tarot else "Выпавшие карты Ленорман:")
     for i, c in enumerate(cards):
         pos = f" [{positions[i]}]" if positions and i < len(positions) else ""
+        body = c.get("upright") or c.get("general") or ""
+        num = c.get("number", "")
         lines.append(
-            f"-{pos} {c.get('number')}. {c.get('name')} ({c.get('emoji', '')}): "
-            f"{c.get('keywords', '')}. {c.get('general', '')}"
+            f"-{pos} {num}. {c.get('name')} ({c.get('emoji', '')}): "
+            f"{c.get('keywords', '')}. {body}"
         )
     if extra:
         lines.append(extra)

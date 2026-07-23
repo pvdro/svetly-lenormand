@@ -226,9 +226,18 @@
   function renderSpreads() {
     const grid = $("#spread-grid");
     grid.innerHTML = "";
-    (data.spreads || [])
-      .filter((s) => !["day", "asc_day"].includes(s.id))
-      .forEach((s) => {
+    const all = (data.spreads || []).filter((s) => !["day", "asc_day"].includes(s.id));
+    const groups = [
+      { key: "lenormand", title: "Ленорман", items: all.filter((s) => (s.system || "lenormand") !== "tarot") },
+      { key: "tarot", title: "Таро Райдера–Уэйта", items: all.filter((s) => s.system === "tarot") },
+    ];
+    groups.forEach((g) => {
+      if (!g.items.length) return;
+      const h = document.createElement("div");
+      h.className = "spread-group-title";
+      h.textContent = g.title;
+      grid.appendChild(h);
+      g.items.forEach((s) => {
         const prem = !!s.premium;
         const btn = document.createElement("button");
         btn.type = "button";
@@ -246,6 +255,7 @@
         });
         grid.appendChild(btn);
       });
+    });
   }
 
   function startSpread(spreadId) {
@@ -295,7 +305,8 @@
 
       if (!r) {
         // локальный режим — полноценный Mini App без сервера
-        const cards = sample(data.deck, pendingSpread.n || 3);
+        const deckSrc = pendingSpread.system === "tarot" ? (data.tarot || data.deck) : data.deck;
+        const cards = sample(deckSrc, pendingSpread.n || 3);
         const text = localReadingText(pendingSpread, cards, question);
         r = {
           reading_id: Date.now(),
@@ -584,21 +595,35 @@
     });
   }
 
-  function renderLibrary() {
+  let libSystem = "lenormand";
+
+  function renderLibrary(system) {
+    if (system) libSystem = system;
     const grid = $("#lib-grid");
     grid.innerHTML = "";
-    data.deck.forEach((c) => {
+    const tabs = $("#lib-tabs");
+    if (tabs) {
+      tabs.querySelectorAll("[data-lib]").forEach((el) => {
+        el.classList.toggle("active", el.getAttribute("data-lib") === libSystem);
+      });
+    }
+    const list = libSystem === "tarot" ? data.tarot || [] : data.deck || [];
+    list.forEach((c, idx) => {
       const b = document.createElement("button");
       b.type = "button";
       b.className = "lib-item";
-      b.innerHTML = `<span class="em">${c.emoji}</span><span class="n">${c.number}</span><span class="nm">${c.name}</span>`;
+      const num = libSystem === "tarot" ? idx + 1 : c.number;
+      b.innerHTML = `<span class="em">${c.emoji}</span><span class="n">${num}</span><span class="nm">${c.name}</span>`;
       b.addEventListener("click", () => {
-        $("#card-detail").innerHTML = `
-          <div class="detail-visual"><span class="em">${c.emoji}</span><span class="num">${c.number}. ${c.name}</span></div>
-          <div class="detail-block"><h4>Общее</h4><p>${c.general}</p></div>
-          <div class="detail-block"><h4>Любовь</h4><p>${c.love}</p></div>
-          <div class="detail-block"><h4>Дело</h4><p>${c.work}</p></div>
-          <div class="detail-block"><h4>Совет</h4><p>${c.advice}</p></div>`;
+        const body = c.upright || c.general || "";
+        let html = `
+          <div class="detail-visual"><span class="em">${c.emoji}</span><span class="num">${c.name}</span></div>
+          <div class="detail-block"><h4>Ключевые слова</h4><p>${c.keywords || "—"}</p></div>
+          <div class="detail-block"><h4>Значение</h4><p>${body}</p></div>
+          <div class="detail-block"><h4>Совет</h4><p>${c.advice || "—"}</p></div>`;
+        if (c.love) html += `<div class="detail-block"><h4>Любовь</h4><p>${c.love}</p></div>`;
+        if (c.work) html += `<div class="detail-block"><h4>Дело</h4><p>${c.work}</p></div>`;
+        $("#card-detail").innerHTML = html;
         show("card");
       });
       grid.appendChild(b);
@@ -667,6 +692,10 @@
 
   // events
   $("#btn-day").addEventListener("click", () => openDay("day"));
+  const btnTarotDay = $("#btn-tarot-day");
+  if (btnTarotDay) {
+    btnTarotDay.addEventListener("click", () => startSpread("t_day"));
+  }
   $("#btn-asc-day").addEventListener("click", () => {
     const p = loadLocalProfile();
     if (p && p.sign) openDay("asc_day");
@@ -699,9 +728,15 @@
   });
   $("#btn-new-profile").addEventListener("click", () => show("profile"));
   $("#btn-library").addEventListener("click", () => {
-    renderLibrary();
+    renderLibrary("lenormand");
     show("library");
   });
+  const libTabs = $("#lib-tabs");
+  if (libTabs) {
+    libTabs.querySelectorAll("[data-lib]").forEach((el) => {
+      el.addEventListener("click", () => renderLibrary(el.getAttribute("data-lib")));
+    });
+  }
   $("#btn-about").addEventListener("click", () => show("about"));
   $("#btn-compat-go").addEventListener("click", () => {
     $("#global-question").value = $("#compat-q").value.trim();

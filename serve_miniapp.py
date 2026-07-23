@@ -187,6 +187,7 @@ class Handler(SimpleHTTPRequestHandler):
 
     def _spreads_meta(self):
         from bot.spreads import SPREADS
+        from bot.tarot import TAROT_SPREADS
 
         items = []
         for s in SPREADS.values():
@@ -200,6 +201,7 @@ class Handler(SimpleHTTPRequestHandler):
                     "blurb": s.blurb,
                     "focus": s.focus,
                     "premium": s.id in PREMIUM_ONLY,
+                    "system": "lenormand",
                 }
             )
         # virtual asc_day
@@ -214,8 +216,23 @@ class Handler(SimpleHTTPRequestHandler):
                 "blurb": "Личный день через восходящий знак и карту Ленорман",
                 "focus": "general",
                 "premium": False,
+                "system": "lenormand",
             },
         )
+        for meta in TAROT_SPREADS.values():
+            items.append(
+                {
+                    "id": meta["id"],
+                    "title": meta["title"],
+                    "emoji": meta["emoji"],
+                    "n": meta["n"],
+                    "positions": list(meta["positions"]),
+                    "blurb": meta["blurb"],
+                    "focus": "general",
+                    "premium": bool(meta.get("premium")),
+                    "system": "tarot",
+                }
+            )
         _json(self, 200, {"items": items})
 
     def _geocode(self, parsed):
@@ -311,10 +328,11 @@ class Handler(SimpleHTTPRequestHandler):
         _json(self, 200, {"ok": True})
 
     def _draw(self):
-        """Вытянуть карты + (опц.) ИИ с лимитами premium."""
-        from bot.cards import DECK, draw
+        """Вытянуть карты + (опц.) ИИ с лимитами premium. Ленорман и Таро."""
+        from bot.cards import draw
         from bot.llm import build_spread_prompt, chat, fallback_spread_text
         from bot.spreads import SPREADS
+        from bot.tarot import TAROT_SPREADS, draw_tarot, tarot_to_dict
 
         body = self._read_json()
         user = self._require_user(body)
@@ -328,18 +346,36 @@ class Handler(SimpleHTTPRequestHandler):
         if sid == "asc_day":
             return _json(self, 400, {"error": "Для дня по восходящему используйте другой запрос"})
 
-        if sid not in SPREADS:
-            return _json(self, 400, {"error": "Неизвестный расклад"})
+        is_tarot = sid.startswith("t_") or sid in TAROT_SPREADS
+        if is_tarot:
+            if sid not in TAROT_SPREADS:
+                return _json(self, 400, {"error": "Неизвестный расклад Таро"})
+            meta = TAROT_SPREADS[sid]
+            spread_title = meta["title"]
+            spread_emoji = meta["emoji"]
+            spread_blurb = meta["blurb"]
+            n_cards = meta["n"]
+            positions = list(meta["positions"])
+            system = "tarot"
+        else:
+            if sid not in SPREADS:
+                return _json(self, 400, {"error": "Неизвестный расклад"})
+            spread = SPREADS[sid]
+            spread_title = spread.title
+            spread_emoji = spread.emoji
+            spread_blurb = spread.blurb
+            n_cards = spread.n_cards
+            positions = list(spread.positions)
+            system = "lenormand"
 
-        spread = SPREADS[sid]
         prem = store.is_premium(uid)
         gate = feature_allowed(sid, is_premium=prem, free_ai_left=1)
         if not gate["ok"]:
             return _json(self, 403, {**gate, "premium_required": True})
 
-        # once-per-day for card of day
-        if sid == "day":
-            existing = store.get_day_reading(uid, "day")
+        # once-per-day for card of day (Ленорман и Таро)
+        if sid in ("day", "t_day"):
+            existing = store.get_day_reading(uid, sid)
             if existing:
                 return _json(
                     self,
@@ -349,60 +385,74 @@ class Handler(SimpleHTTPRequestHandler):
                         "reading_id": existing["id"],
                         "spread_id": sid,
                         "title": existing["title"],
+                        "emoji": spread_emoji,
                         "cards": json.loads(existing["cards_json"] or "[]"),
                         "ai_text": existing["ai_text"],
                         "question": existing["question"],
                         "day_key": existing["day_key"],
+                        "system": system,
                     },
                 )
 
-        cards = draw(spread.n_cards)
-        cards_d = [
-            {
-                "number": c.number,
-                "name": c.name,
-                "emoji": c.emoji,
-                "keywords": c.keywords,
-                "general": c.general,
-                "love": c.love,
-                "work": c.work,
-                "advice": c.advice,
-            }
-            for c in cards
-        ]
+        if is_tarot:
+            cards_d = [tarot_to_dict(c) for c in draw_tarot(n_cards)]
+        else:
+            cards = draw(n_cards)
+            cards_d = [
+                {
+                    "number": c.number,
+                    "name": c.name,
+                    "emoji": c.emoji,
+                    "keywords": c.keywords,
+                    "general": c.general,
+                    "love": c.love,
+                    "work": c.work,
+                    "advice": c.advice,
+                    "system": "lenormand",
+                }
+                for c in cards
+            ]
 
         ai_text = None
         provider = model = None
         ai_flag = False
+        sys_blurb = (
+            f"{spread_blurb} Система: Таро Райдера–Уэйта."
+            if is_tarot
+            else f"{spread_blurb} Система: Ленорман."
+        )
 
         if want_ai:
             used = store.count_ai_today(uid)
             left = 999 if prem else max(0, FREE_AI_READINGS_PER_DAY - used)
             agate = feature_allowed("ai", is_premium=prem, free_ai_left=left)
             if not agate["ok"]:
-                # still return cards without AI
-                rid = store.save_reading(uid, sid, spread.title, question, cards_d, None, {"no_ai": agate})
+                rid = store.save_reading(
+                    uid, sid, spread_title, question, cards_d, None, {"no_ai": agate, "system": system}
+                )
                 return _json(
                     self,
                     200,
                     {
                         "reading_id": rid,
                         "spread_id": sid,
-                        "title": spread.title,
-                        "emoji": spread.emoji,
-                        "blurb": spread.blurb,
-                        "positions": list(spread.positions),
+                        "title": spread_title,
+                        "emoji": spread_emoji,
+                        "blurb": spread_blurb,
+                        "positions": positions,
                         "cards": cards_d,
                         "ai_text": None,
                         "ai": False,
                         "limit": agate,
                         "premium": store.premium_info(uid),
+                        "system": system,
                     },
                 )
 
+            card_ids = [c.get("id") or c.get("number") for c in cards_d]
             cache_key = hashlib.sha256(
                 json.dumps(
-                    {"sid": sid, "cards": [c["number"] for c in cards_d], "q": question or "", "d": store.today_key()},
+                    {"sid": sid, "cards": card_ids, "q": question or "", "d": store.today_key()},
                     ensure_ascii=False,
                 ).encode()
             ).hexdigest()
@@ -411,13 +461,14 @@ class Handler(SimpleHTTPRequestHandler):
                 ai_text, provider, model, ai_flag = cached["text"], cached["provider"], cached.get("model"), True
             else:
                 prompt = build_spread_prompt(
-                    spread_title=spread.title,
-                    spread_blurb=spread.blurb,
+                    spread_title=spread_title,
+                    spread_blurb=sys_blurb,
                     cards=cards_d,
-                    positions=list(spread.positions),
+                    positions=positions,
                     question=question,
+                    extra="Пиши только по-русски, без англицизмов. Тон светлый и бережный.",
                 )
-                if sid in ("week", "month", "deep", "compat"):
+                if sid in ("week", "month", "deep", "compat", "t_celtic", "t_path"):
                     prompt += "\nСделай текст чуть подробнее, но всё ещё тёплым и без страшилок."
                 try:
                     ai_text, provider, model = chat(prompt)
@@ -426,7 +477,7 @@ class Handler(SimpleHTTPRequestHandler):
                     if not prem:
                         store.inc_ai_today(uid)
                 except Exception as e:
-                    ai_text = fallback_spread_text(cards_d, spread.title)
+                    ai_text = fallback_spread_text(cards_d, spread_title)
                     provider = "fallback"
                     ai_flag = False
                     ai_text += f"\n\n_(Прогноз: {e})_"
@@ -434,12 +485,12 @@ class Handler(SimpleHTTPRequestHandler):
         rid = store.save_reading(
             uid,
             sid,
-            spread.title,
+            spread_title,
             question,
             cards_d,
             ai_text,
-            {"provider": provider, "model": model},
-            day_key=store.today_key() if sid == "day" else store.today_key(),
+            {"provider": provider, "model": model, "system": system},
+            day_key=store.today_key(),
         )
 
         _json(
@@ -448,16 +499,17 @@ class Handler(SimpleHTTPRequestHandler):
             {
                 "reading_id": rid,
                 "spread_id": sid,
-                "title": spread.title,
-                "emoji": spread.emoji,
-                "blurb": spread.blurb,
-                "positions": list(spread.positions),
+                "title": spread_title,
+                "emoji": spread_emoji,
+                "blurb": spread_blurb,
+                "positions": positions,
                 "cards": cards_d,
                 "question": question,
                 "ai_text": ai_text,
                 "ai": ai_flag,
                 "provider": provider,
                 "model": model,
+                "system": system,
                 "premium": store.premium_info(uid),
                 "free_ai_left": (
                     999
