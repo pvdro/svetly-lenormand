@@ -27,11 +27,13 @@ def main() -> int:
     env["PYTHONUNBUFFERED"] = "1"
     env["PYTHONPATH"] = str(ROOT)
 
+    # сначала HTTP (healthcheck), потом бот — меньше гонки при деплое
     web = subprocess.Popen(
         [sys.executable, str(ROOT / "serve_miniapp.py"), "--port", str(port), "--host", "0.0.0.0"],
         cwd=str(ROOT),
         env=env,
     )
+    time.sleep(1.2)
     bot = subprocess.Popen(
         [sys.executable, str(ROOT / "main.py")],
         cwd=str(ROOT),
@@ -39,15 +41,19 @@ def main() -> int:
     )
 
     def shutdown(*_args):
-        for p in (web, bot):
+        # сначала бот (отпускает getUpdates), потом web
+        for p in (bot, web):
             try:
                 p.send_signal(signal.SIGTERM)
             except Exception:
                 pass
-        time.sleep(2)
-        for p in (web, bot):
+        time.sleep(3)
+        for p in (bot, web):
             if p.poll() is None:
-                p.kill()
+                try:
+                    p.kill()
+                except Exception:
+                    pass
         sys.exit(0)
 
     signal.signal(signal.SIGTERM, shutdown)
@@ -59,7 +65,15 @@ def main() -> int:
             shutdown()
         if bot.poll() is not None:
             print("bot exited", bot.returncode, flush=True)
-            shutdown()
+            # web жив, а бот упал — перезапуск бота
+            code = bot.returncode
+            print(f"restarting bot after exit {code}", flush=True)
+            time.sleep(2)
+            bot = subprocess.Popen(
+                [sys.executable, str(ROOT / "main.py")],
+                cwd=str(ROOT),
+                env=env,
+            )
         time.sleep(1)
 
 

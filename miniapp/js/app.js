@@ -248,13 +248,40 @@
       apiOnline = false;
       return false;
     }
-    try {
-      const res = await fetchWithTimeout(API_BASE + "/api/health", {}, 5000);
-      apiOnline = res.ok;
-    } catch (_) {
-      apiOnline = false;
+    // 2 попытки — мобильные сети / холодный старт Railway
+    for (let i = 0; i < 2; i++) {
+      try {
+        const res = await fetchWithTimeout(API_BASE + "/api/health", {}, i === 0 ? 4000 : 7000);
+        if (res.ok) {
+          apiOnline = true;
+          return true;
+        }
+      } catch (_) {}
+      if (i === 0) await new Promise((r) => setTimeout(r, 400));
     }
-    return apiOnline;
+    apiOnline = false;
+    return false;
+  }
+
+  function toast(msg) {
+    try {
+      if (tg && tg.showAlert) {
+        tg.showAlert(String(msg).slice(0, 180));
+        return;
+      }
+    } catch (_) {}
+    // лёгкий toast без alert, если возможно
+    let el = document.getElementById("toast");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "toast";
+      el.className = "toast";
+      document.body.appendChild(el);
+    }
+    el.textContent = msg;
+    el.classList.add("show");
+    clearTimeout(el._t);
+    el._t = setTimeout(() => el.classList.remove("show"), 2200);
   }
 
   function show(name) {
@@ -667,10 +694,10 @@
         : `${brand} ✨\n${r.title || "Расклад"}\n${q}${names}\n\nt.me/${CFG.BOT_USERNAME || "AstoManiabot"}`;
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(() => {
-        alert(uiLang === "en" ? "Text copied — paste into Stories" : "Текст скопирован — вставьте в Stories");
-      }).catch(() => alert(text));
+        toast(uiLang === "en" ? "Copied — paste into Stories" : "Скопировано — вставьте в Stories");
+      }).catch(() => toast(text.slice(0, 120)));
     } else {
-      alert(text);
+      toast(text.slice(0, 120));
     }
     // also try telegram share if available
     try {
@@ -1147,8 +1174,8 @@
     btnCopyInvite.addEventListener("click", () => {
       const link = ($("#invite-link") && $("#invite-link").textContent) || "";
       if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(link).then(() => alert(tr("invite_copied")));
-      } else alert(link);
+        navigator.clipboard.writeText(link).then(() => toast(tr("invite_copied")));
+      } else toast(link);
     });
   }
   const btnNotify = $("#btn-notify");

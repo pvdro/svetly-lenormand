@@ -88,61 +88,85 @@ def _lang(user_id: int | None, telegram_code: str | None = None) -> str:
     return normalize_lang(telegram_code)
 
 
+def _html(s: str) -> str:
+    return (
+        str(s)
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+    )
+
+
 def _name(user) -> str:
-    """Имя человека (не бота)."""
+    """Имя человека (не бота). Сохраняем _, дефисы — экранируем через HTML."""
     if not user:
         return t("fallback_name", "ru")
-    # сообщение бота / callback на чужом message — from_user может быть бот
     if getattr(user, "is_bot", False):
         return t("fallback_name", "ru")
     raw = (getattr(user, "first_name", None) or getattr(user, "username", None) or "").strip()
-    # не подставлять бренд, если вдруг first_name совпал
     if not raw or raw.lower() in ("астромания", "astromania", "astomaniabot"):
         return t("fallback_name", "ru")
-    # убрать markdown-символы, чтобы не сломать parse_mode
-    for ch in ("*", "_", "`", "[", "]"):
-        raw = raw.replace(ch, "")
-    return raw[:64] or t("fallback_name", "ru")
+    return raw[:64]
+
+
+def _welcome_html(lang: str, name: str) -> str:
+    """Приветствие в HTML — надёжнее Markdown для имён."""
+    n = _html(name)
+    if lang == "en":
+        return (
+            f"🌸 <b>Astromania</b>\n\n"
+            f"Hi, <b>{n}</b> ✨\n\n"
+            f"Gentle <b>Lenormand</b> and <b>Rider–Waite Tarot</b>,\n"
+            f"plus a personal day by <b>rising sign</b>.\n\n"
+            f"Everything is in the <b>app</b> — button below 👇\n\n"
+            f"• Lenormand &amp; Tarot\n"
+            f"• Day by rising sign\n"
+            f"• Full access with Telegram Stars\n\n"
+            f"Language: /lang · help: /help"
+        )
+    return (
+        f"🌸 <b>Астромания</b>\n\n"
+        f"Привет, <b>{n}</b> ✨\n\n"
+        f"Светлые расклады <b>Ленорман</b> и <b>Таро Райдера–Уэйта</b>,\n"
+        f"день по <b>восходящему знаку</b>.\n\n"
+        f"Всё внутри <b>приложения</b> — кнопка ниже 👇\n\n"
+        f"• Ленорман и Таро\n"
+        f"• День по восходящему знаку\n"
+        f"• Полный доступ — звёздами Телеграма\n\n"
+        f"Язык: /lang · помощь: /help"
+    )
 
 
 async def _send_welcome(message: Message, lang: str, user=None) -> None:
     """Красивое фото + приветствие с именем пользователя + кнопка приложения."""
-    # всегда предпочитаем явно переданного user (callback → query.from_user)
     person = user or message.from_user
     if person and getattr(person, "is_bot", False):
-        person = user  # если message.from_user — бот, а user не передан, fallback
+        person = user
     name = _name(person if person and not getattr(person, "is_bot", False) else user)
-    # если всё ещё пусто — fallback
     if not name or name.lower() in ("астромания", "astromania"):
         name = t("fallback_name", lang)
 
-    caption = t("welcome", lang, name=name)
+    caption = _welcome_html(lang, name)
     kb = open_app_inline(lang)
-    # сначала убираем старую reply-клавиатуру (текст не может быть пустым!)
-    try:
-        await message.answer(
-            "✨" if lang == "ru" else "✨",
-            reply_markup=main_menu(),
-        )
-    except Exception:
-        pass
     try:
         if WELCOME_IMAGE.exists():
             photo = FSInputFile(str(WELCOME_IMAGE))
-            # caption limit ~1024; welcome целиком обычно короче
-            short = caption if len(caption) <= 1000 else t("welcome_caption", lang, name=name)
+            short = caption if len(caption) <= 1000 else (
+                f"🌸 <b>Astromania</b> · <b>{_html(name)}</b>" if lang == "en"
+                else f"🌸 <b>Астромания</b> · <b>{_html(name)}</b>"
+            )
             await message.answer_photo(
                 photo,
                 caption=short,
-                parse_mode="Markdown",
-                reply_markup=kb,
+                parse_mode="HTML",
+                reply_markup=kb or main_menu(),
             )
             if short != caption:
-                await message.answer(caption, parse_mode="Markdown", reply_markup=kb or main_menu())
+                await message.answer(caption, parse_mode="HTML", reply_markup=kb or main_menu())
             return
     except Exception as e:
         logger.warning("welcome photo: %s", e)
-    await message.answer(caption, parse_mode="Markdown", reply_markup=kb or main_menu())
+    await message.answer(caption, parse_mode="HTML", reply_markup=kb or main_menu())
 
 
 def _chunk(text: str, limit: int = 3900) -> list[str]:
@@ -304,13 +328,13 @@ async def _run_spread(message: Message, spread_id: str, question: str | None = N
         day_key=store.today_key() if spread_id in ("day", "t_day") else store.today_key(),
     )
     await _send_long(message, text, parse_mode="Markdown", reply_markup=after_spread(spread_id, lang))
-    # soft CTA: thank + invite
+    # soft CTA: thank (коротко, без спама invite каждый раз)
     try:
         from bot.keyboards import thanks_inline
         await message.answer(
-            "💛 " + ("Понравилось? Можно сказать спасибо звёздами или пригласить друга /invite"
+            "💛 " + ("Понравилось — можно сказать спасибо звёздами"
                      if lang == "ru" else
-                     "Liked it? Say thanks with Stars or invite a friend /invite"),
+                     "Liked it — you can say thanks with Stars"),
             reply_markup=thanks_inline(lang),
         )
     except Exception:

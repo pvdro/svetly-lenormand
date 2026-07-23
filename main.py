@@ -192,7 +192,9 @@ async def main() -> None:
     log.info("ADMIN_IDS=%s SUPPORT=@%s", admin_ids() or "{}", support_username() or "-")
     await setup_menu_button(bot)
     await setup_bot_profile(bot)
+    # сброс webhook + пауза: меньше Conflict при rolling-deploy
     await bot.delete_webhook(drop_pending_updates=True)
+    await asyncio.sleep(2.5)
     log.info("Starting long polling…")
 
     for aid in admin_ids():
@@ -207,7 +209,13 @@ async def main() -> None:
             log.warning("startup notify admin %s: %s", aid, e)
 
     asyncio.create_task(notify_loop(bot))
-    await dp.start_polling(bot)
+    # handle_signals: корректное завершение; allowed_updates — меньше шума
+    await dp.start_polling(
+        bot,
+        allowed_updates=["message", "callback_query", "pre_checkout_query"],
+        handle_signals=False,  # start.py шлёт SIGTERM самому процессу
+        close_bot_session=True,
+    )
 
 
 if __name__ == "__main__":
