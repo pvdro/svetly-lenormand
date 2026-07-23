@@ -182,7 +182,7 @@ class Handler(SimpleHTTPRequestHandler):
         if not user:
             return
         if not store.is_premium(user["id"]):
-            return _json(self, 403, {"error": "Журнал — в Premium", "premium_required": True})
+            return _json(self, 403, {"error": "Дневник — в полном доступе", "premium_required": True})
         _json(self, 200, {"items": store.list_journal(user["id"])})
 
     def _spreads_meta(self):
@@ -207,11 +207,11 @@ class Handler(SimpleHTTPRequestHandler):
             1,
             {
                 "id": "asc_day",
-                "title": "День по асценденту",
+                "title": "День по восходящему",
                 "emoji": "🌅",
                 "n": 1,
-                "positions": ["Карта для ASC"],
-                "blurb": "Личный день через асцендент + Ленорман + ИИ",
+                "positions": ["Карта дня"],
+                "blurb": "Личный день через восходящий знак и карту Ленорман",
                 "focus": "general",
                 "premium": False,
             },
@@ -286,7 +286,7 @@ class Handler(SimpleHTTPRequestHandler):
         if not user:
             return
         if body.get("enabled") and not store.is_premium(user["id"]):
-            return _json(self, 403, {"error": "Уведомления — в Premium", "premium_required": True})
+            return _json(self, 403, {"error": "Напоминания — в полном доступе", "premium_required": True})
         store.set_notify(
             user["id"],
             bool(body.get("enabled")),
@@ -301,7 +301,7 @@ class Handler(SimpleHTTPRequestHandler):
         if not user:
             return
         if not store.is_premium(user["id"]):
-            return _json(self, 403, {"error": "Журнал — в Premium", "premium_required": True})
+            return _json(self, 403, {"error": "Дневник — в полном доступе", "premium_required": True})
         store.add_journal(
             int(body["reading_id"]),
             user["id"],
@@ -326,7 +326,7 @@ class Handler(SimpleHTTPRequestHandler):
         want_ai = bool(body.get("ai", True))
 
         if sid == "asc_day":
-            return _json(self, 400, {"error": "Для ASC используйте /api/reading/day"})
+            return _json(self, 400, {"error": "Для дня по восходящему используйте другой запрос"})
 
         if sid not in SPREADS:
             return _json(self, 400, {"error": "Неизвестный расклад"})
@@ -429,7 +429,7 @@ class Handler(SimpleHTTPRequestHandler):
                     ai_text = fallback_spread_text(cards_d, spread.title)
                     provider = "fallback"
                     ai_flag = False
-                    ai_text += f"\n\n_(ИИ: {e})_"
+                    ai_text += f"\n\n_(Прогноз: {e})_"
 
         rid = store.save_reading(
             uid,
@@ -504,7 +504,7 @@ class Handler(SimpleHTTPRequestHandler):
             if not prof and body.get("profile"):
                 prof = body["profile"]
             if not prof or not prof.get("sign"):
-                return _json(self, 400, {"error": "Сначала рассчитайте асцендент", "need_profile": True})
+                return _json(self, 400, {"error": "Сначала рассчитайте восходящий знак", "need_profile": True})
             # deterministic card
             day_key = store.today_key()
             seed_s = f"{day_key}-{prof['sign']}-{prof.get('absolute_degree', 0)}"
@@ -522,7 +522,7 @@ class Handler(SimpleHTTPRequestHandler):
                     "advice": card.advice,
                 }
             ]
-            title = f"День по ASC {prof['sign']}"
+            title = f"День по восходящему · {prof['sign']}"
             prompt = build_asc_day_prompt(
                 sign=prof["sign"],
                 emoji=prof.get("emoji") or "✦",
@@ -579,7 +579,7 @@ class Handler(SimpleHTTPRequestHandler):
                     if not prem:
                         store.inc_ai_today(uid)
                 except Exception as e:
-                    ai_text = fallback_spread_text(cards_d, title) + f"\n\n_(ИИ: {e})_"
+                    ai_text = fallback_spread_text(cards_d, title) + f"\n\n_(Прогноз: {e})_"
                     provider = "fallback"
         else:
             ai_text = fallback_spread_text(cards_d, title)

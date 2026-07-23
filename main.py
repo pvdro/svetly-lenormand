@@ -63,7 +63,7 @@ async def notify_loop(bot) -> None:
 
                     await bot.send_message(
                         u["user_id"],
-                        "🌅 Доброе утро! Ваш день в **Светлом Ленормане** ждёт — карта и ASC.\nОткройте приложение ✨",
+                        "🌅 Доброе утро! Ваш день в **Светлом Ленормане** ждёт — карта и восходящий знак.\nОткройте приложение ✨",
                         parse_mode="Markdown",
                         reply_markup=open_app_inline(),
                     )
