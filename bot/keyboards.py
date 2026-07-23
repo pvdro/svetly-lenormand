@@ -1,4 +1,4 @@
-"""Клавиатуры бота — русский текст, расклады в чате."""
+"""Клавиатуры бота — только Mini App, без кнопок раскладов в чате."""
 from __future__ import annotations
 
 import os
@@ -8,6 +8,7 @@ from aiogram.types import (
     InlineKeyboardMarkup,
     KeyboardButton,
     ReplyKeyboardMarkup,
+    ReplyKeyboardRemove,
     WebAppInfo,
 )
 
@@ -19,38 +20,13 @@ def miniapp_url() -> str:
     return os.getenv("MINIAPP_URL", "").strip()
 
 
-def main_menu() -> ReplyKeyboardMarkup:
-    """Основное меню прямо в чате — работает без приложения."""
-    rows: list[list[KeyboardButton]] = [
-        [KeyboardButton(text="☀️ Карта дня"), KeyboardButton(text="🌅 День по восходящему")],
-        [KeyboardButton(text="✨ Три карты"), KeyboardButton(text="💗 Любовь")],
-        [KeyboardButton(text="🌿 Ситуация"), KeyboardButton(text="🌻 Дело")],
-        [KeyboardButton(text="🔮 Да / Нет"), KeyboardButton(text="🌈 Путь")],
-        [KeyboardButton(text="🃏 Таро: карта дня"), KeyboardButton(text="🃏 Таро: три карты")],
-        [KeyboardButton(text="🃏 Таро: любовь"), KeyboardButton(text="🃏 Таро: путь")],
-        [KeyboardButton(text="📅 Неделя"), KeyboardButton(text="🗓️ Месяц")],
-        [KeyboardButton(text="⭐ Полный доступ"), KeyboardButton(text="💬 Поддержка")],
-        [KeyboardButton(text="ℹ️ Помощь")],
-    ]
-    url = miniapp_url()
-    if url:
-        rows.insert(
-            0,
-            [
-                KeyboardButton(
-                    text="✨ Красивое приложение",
-                    web_app=WebAppInfo(url=url),
-                )
-            ],
-        )
-    return ReplyKeyboardMarkup(
-        keyboard=rows,
-        resize_keyboard=True,
-        input_field_placeholder="Выберите расклад…",
-    )
+def main_menu() -> ReplyKeyboardRemove:
+    """Скрываем нижнюю клавиатуру — всё в приложении."""
+    return ReplyKeyboardRemove(remove_keyboard=True)
 
 
 def open_app_inline() -> InlineKeyboardMarkup | None:
+    """Единственная главная кнопка: открыть Mini App."""
     url = miniapp_url()
     rows: list[list[InlineKeyboardButton]] = []
     if url:
@@ -62,17 +38,13 @@ def open_app_inline() -> InlineKeyboardMarkup | None:
                 )
             ]
         )
+    # служебные — не расклады
     rows.append(
         [
-            InlineKeyboardButton(
-                text="⭐ Полный доступ",
-                callback_data="buy:premium_30",
-            ),
+            InlineKeyboardButton(text="⭐ Полный доступ", callback_data="buy:premium_30"),
+            InlineKeyboardButton(text="💬 Поддержка", callback_data="support:menu"),
         ]
     )
-    sup = support_url()
-    if sup:
-        rows.append([InlineKeyboardButton(text="💬 Написать в поддержку", url=sup)])
     if not rows:
         return None
     return InlineKeyboardMarkup(inline_keyboard=rows)
@@ -86,6 +58,11 @@ def support_inline() -> InlineKeyboardMarkup:
     rows.append(
         [InlineKeyboardButton(text="✉️ Написать здесь в боте", callback_data="support:write")]
     )
+    url = miniapp_url()
+    if url:
+        rows.append(
+            [InlineKeyboardButton(text="✨ В приложение", web_app=WebAppInfo(url=url))]
+        )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -112,14 +89,19 @@ def premium_inline() -> InlineKeyboardMarkup:
 
 
 def after_spread(spread_id: str) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
+    """После редкого расклада в чате — снова в приложение."""
+    url = miniapp_url()
+    rows: list[list[InlineKeyboardButton]] = []
+    if url:
+        rows.append(
             [
-                InlineKeyboardButton(text="🔁 Ещё раз", callback_data=f"spread:{spread_id}"),
-                InlineKeyboardButton(text="☀️ Карта дня", callback_data="spread:day"),
+                InlineKeyboardButton(
+                    text="✨ Открыть приложение",
+                    web_app=WebAppInfo(url=url),
+                )
             ]
-        ]
-    )
+        )
+    return InlineKeyboardMarkup(inline_keyboard=rows or [[InlineKeyboardButton(text="⭐ Полный доступ", callback_data="buy:premium_30")]])
 
 
 def cancel_support_kb() -> ReplyKeyboardMarkup:

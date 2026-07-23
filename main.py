@@ -63,11 +63,13 @@ async def notify_loop(bot) -> None:
                 try:
                     from bot.keyboards import main_menu
 
+                    from bot.keyboards import open_app_inline
+
                     await bot.send_message(
                         u["user_id"],
-                        "🌅 Доброе утро! Ваш день в **Светлом Ленормане** ждёт — карта дня или день по восходящему 👇",
+                        "🌅 Доброе утро! Ваш день в приложении — карта дня или день по восходящему 👇",
                         parse_mode="Markdown",
-                        reply_markup=main_menu(),
+                        reply_markup=open_app_inline(),
                     )
                     sent_today.add(key)
                     log.info("notified %s", u["user_id"])

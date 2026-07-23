@@ -310,13 +310,13 @@ async def _run_asc_day(message: Message) -> None:
 async def cmd_start(message: Message) -> None:
     if message.from_user:
         store.upsert_user(message.from_user.id, message.from_user.username, message.from_user.first_name)
+    # убираем старую нижнюю клавиатуру раскладов
     await message.answer(WELCOME, parse_mode="Markdown", reply_markup=main_menu())
     app_kb = open_app_inline()
     if app_kb:
-        await message.answer(
-            "Можно также открыть красивое приложение (если сеть позволяет):",
-            reply_markup=app_kb,
-        )
+        await message.answer("👇", reply_markup=app_kb)
+    else:
+        await message.answer(NO_APP)
     args = (message.text or "").split(maxsplit=1)
     if len(args) > 1:
         payload = args[1].strip().lower()
@@ -328,17 +328,16 @@ async def cmd_start(message: Message) -> None:
 
 @router.message(Command("app", "open", "menu", "приложение"))
 async def cmd_app(message: Message) -> None:
-    await message.answer("Меню раскладов 👇", reply_markup=main_menu())
     kb = open_app_inline()
     if kb:
-        await message.answer("Приложение (если открывается):", reply_markup=kb)
+        await message.answer("Откройте приложение 👇", reply_markup=kb)
     else:
         await message.answer(NO_APP, reply_markup=main_menu())
 
 
 @router.message(Command("help", "помощь"))
 async def cmd_help(message: Message) -> None:
-    await message.answer(HELP, parse_mode="Markdown", reply_markup=main_menu())
+    await message.answer(HELP, parse_mode="Markdown", reply_markup=open_app_inline() or main_menu())
 
 
 @router.message(Command("premium", "stars", "pay", "dostup", "доступ"))
@@ -358,7 +357,7 @@ async def cmd_premium(message: Message) -> None:
 
 @router.message(Command("money", "withdraw", "вывод"))
 async def cmd_money(message: Message) -> None:
-    await message.answer(HOW_MONEY, parse_mode="Markdown", reply_markup=main_menu())
+    await message.answer(HOW_MONEY, parse_mode="Markdown")
 
 
 @router.message(Command("status", "статус"))
@@ -370,28 +369,13 @@ async def cmd_status(message: Message) -> None:
     if info["active"]:
         await message.answer(
             f"✅ Полный доступ до {info['until'][:10]}",
-            reply_markup=main_menu(),
+            reply_markup=open_app_inline(),
         )
     else:
         await message.answer(
             f"Бесплатный режим.\nЖивых прогнозов сегодня: {used}/3\n/dostup — тарифы ⭐",
-            reply_markup=main_menu(),
+            reply_markup=open_app_inline(),
         )
-
-
-@router.message(F.text == "ℹ️ Помощь")
-async def btn_help(message: Message) -> None:
-    await cmd_help(message)
-
-
-@router.message(F.text == "⭐ Полный доступ")
-async def btn_prem(message: Message) -> None:
-    await cmd_premium(message)
-
-
-@router.message(F.text == "💬 Поддержка")
-async def btn_support(message: Message) -> None:
-    await cmd_support(message)
 
 
 @router.message(F.text == "✖️ Отмена")
@@ -402,11 +386,9 @@ async def btn_cancel(message: Message) -> None:
     _waiting_birth.discard(uid)
     _waiting_support.discard(uid)
     await message.answer("Отменено.", reply_markup=main_menu())
-
-
-@router.message(F.text == "🌅 День по восходящему")
-async def btn_asc(message: Message) -> None:
-    await _run_asc_day(message)
+    kb = open_app_inline()
+    if kb:
+        await message.answer("Приложение 👇", reply_markup=kb)
 
 
 @router.message(Command("myid", "мойid", "id"))
@@ -420,7 +402,6 @@ async def cmd_myid(message: Message) -> None:
         f"Юзернейм: @{u.username or '—'}\n\n"
         "_Для статистики владельца: добавьте этот id в переменную `ADMIN_IDS` на сервере._",
         parse_mode="Markdown",
-        reply_markup=main_menu(),
     )
 
 
@@ -430,7 +411,6 @@ async def cmd_stats(message: Message) -> None:
         await message.answer(
             "Статистика доступна только владельцу.\n"
             "Чтобы настроить: /myid → добавьте id в ADMIN_IDS.",
-            reply_markup=main_menu(),
         )
         return
     stats = store.get_usage_stats()
@@ -443,7 +423,7 @@ async def cmd_stats(message: Message) -> None:
             un = f"@{r['username']}" if r.get("username") else r.get("first_name") or "—"
             lines.append(f"  · `{r['user_id']}` {un}")
         text += "\n" + "\n".join(lines)
-    await _send_long(message, text, parse_mode="Markdown", reply_markup=main_menu())
+    await _send_long(message, text, parse_mode="Markdown")
 
 
 @router.message(Command("podderzhka", "support", "helpme", "поддержка"))
@@ -457,6 +437,13 @@ async def cmd_support(message: Message) -> None:
             "Напишите сообщение — я перешлю автору.",
             reply_markup=cancel_support_kb(),
         )
+
+
+@router.callback_query(F.data == "support:menu")
+async def cb_support_menu(query: CallbackQuery) -> None:
+    await query.answer()
+    if query.message:
+        await query.message.answer(SUPPORT, parse_mode="Markdown", reply_markup=support_inline())
 
 
 @router.callback_query(F.data == "support:write")
@@ -502,22 +489,23 @@ async def _forward_support_to_admins(message: Message, text: str) -> bool:
 
 
 @router.message(F.text.in_(set(BUTTON_TO_SPREAD)))
-async def btn_spread(message: Message) -> None:
-    sid = BUTTON_TO_SPREAD[message.text or ""]
-    q = _last_question.pop(message.from_user.id, None) if message.from_user else None
-    await _run_spread(message, sid, q)
+async def btn_spread_legacy(message: Message) -> None:
+    """Старые кнопки чата: направляем в приложение."""
+    kb = open_app_inline()
+    await message.answer(
+        "Расклады теперь **в приложении** ✨\nНажмите кнопку ниже.",
+        parse_mode="Markdown",
+        reply_markup=kb or main_menu(),
+    )
 
 
 @router.callback_query(F.data.startswith("spread:"))
 async def cb_spread(query: CallbackQuery) -> None:
-    sid = (query.data or "").split(":", 1)[1]
-    await query.answer()
+    await query.answer("Откройте приложение")
     if query.message:
-        # fake message from user
-        class M:
-            pass
-        # use real message
-        await _run_spread(query.message, sid, None)
+        kb = open_app_inline()
+        if kb:
+            await query.message.answer("Расклады в приложении 👇", reply_markup=kb)
 
 
 @router.callback_query(F.data.startswith("buy:"))
@@ -660,13 +648,19 @@ async def text_router(message: Message) -> None:
             await message.answer(f"Не удалось рассчитать: {e}", reply_markup=main_menu())
         return
 
-    # free text = question for next spread
+    # free text → подсказка открыть приложение (кроме режима поддержки/даты)
     if len(text) > 2 and not text.startswith("/"):
-        _last_question[uid] = text
+        kb = open_app_inline()
         await message.answer(
-            f"Вопрос запомнила: «{text[:120]}»\nТеперь выберите расклад кнопкой внизу 👇",
-            reply_markup=main_menu(),
+            "Расклады — в **приложении** ✨\n"
+            "Команды: /dostup · /podderzhka · /help",
+            parse_mode="Markdown",
+            reply_markup=kb or main_menu(),
         )
         return
 
-    await message.answer("Выберите расклад кнопками внизу 👇", reply_markup=main_menu())
+    kb = open_app_inline()
+    await message.answer(
+        "Откройте приложение 👇",
+        reply_markup=kb or main_menu(),
+    )
