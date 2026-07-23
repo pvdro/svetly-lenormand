@@ -11,6 +11,7 @@ from aiogram.types import (
     WebAppInfo,
 )
 
+from bot.admin import support_url
 from bot.premium import PLANS
 
 
@@ -28,7 +29,8 @@ def main_menu() -> ReplyKeyboardMarkup:
         [KeyboardButton(text="🃏 Таро: карта дня"), KeyboardButton(text="🃏 Таро: три карты")],
         [KeyboardButton(text="🃏 Таро: любовь"), KeyboardButton(text="🃏 Таро: путь")],
         [KeyboardButton(text="📅 Неделя"), KeyboardButton(text="🗓️ Месяц")],
-        [KeyboardButton(text="⭐ Полный доступ"), KeyboardButton(text="ℹ️ Помощь")],
+        [KeyboardButton(text="⭐ Полный доступ"), KeyboardButton(text="💬 Поддержка")],
+        [KeyboardButton(text="ℹ️ Помощь")],
     ]
     url = miniapp_url()
     if url:
@@ -50,24 +52,41 @@ def main_menu() -> ReplyKeyboardMarkup:
 
 def open_app_inline() -> InlineKeyboardMarkup | None:
     url = miniapp_url()
-    if not url:
-        return None
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
+    rows: list[list[InlineKeyboardButton]] = []
+    if url:
+        rows.append(
             [
                 InlineKeyboardButton(
                     text="✨ Открыть приложение",
                     web_app=WebAppInfo(url=url),
                 )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="⭐ Полный доступ",
-                    callback_data="buy:premium_30",
-                ),
-            ],
+            ]
+        )
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text="⭐ Полный доступ",
+                callback_data="buy:premium_30",
+            ),
         ]
     )
+    sup = support_url()
+    if sup:
+        rows.append([InlineKeyboardButton(text="💬 Написать в поддержку", url=sup)])
+    if not rows:
+        return None
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def support_inline() -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    sup = support_url()
+    if sup:
+        rows.append([InlineKeyboardButton(text="💬 Открыть чат с автором", url=sup)])
+    rows.append(
+        [InlineKeyboardButton(text="✉️ Написать здесь в боте", callback_data="support:write")]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def premium_inline() -> InlineKeyboardMarkup:
@@ -86,6 +105,9 @@ def premium_inline() -> InlineKeyboardMarkup:
                 )
             ]
         )
+    sup = support_url()
+    if sup:
+        rows.append([InlineKeyboardButton(text="💬 Поддержка", url=sup)])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -97,4 +119,12 @@ def after_spread(spread_id: str) -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="☀️ Карта дня", callback_data="spread:day"),
             ]
         ]
+    )
+
+
+def cancel_support_kb() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="✖️ Отмена")]],
+        resize_keyboard=True,
+        one_time_keyboard=True,
     )

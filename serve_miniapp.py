@@ -90,6 +90,19 @@ class Handler(SimpleHTTPRequestHandler):
             from bot.llm import provider_status
 
             return _json(self, 200, provider_status())
+        if path == "/api/public-config":
+            from bot.admin import support_url, support_username
+
+            return _json(
+                self,
+                200,
+                {
+                    "support_username": support_username() or None,
+                    "support_url": support_url(),
+                    "support_bot": "https://t.me/AstoManiabot?start=podderzhka",
+                    "bot": "https://t.me/AstoManiabot",
+                },
+            )
         if path == "/api/plans":
             return _json(self, 200, {"plans": list(PLANS.values()), "free_ai_per_day": FREE_AI_READINGS_PER_DAY})
         if path == "/api/me":

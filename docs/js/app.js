@@ -738,6 +738,19 @@
     });
   }
   $("#btn-about").addEventListener("click", () => show("about"));
+
+  function openSupport() {
+    const u = (CFG.SUPPORT_USERNAME || "").replace(/^@/, "");
+    const bot = CFG.SUPPORT_BOT || "https://t.me/AstoManiabot?start=podderzhka";
+    const url = u ? `https://t.me/${u}` : bot;
+    if (tg && tg.openTelegramLink) tg.openTelegramLink(url);
+    else window.open(url, "_blank");
+  }
+  const btnSupport = $("#btn-support");
+  if (btnSupport) btnSupport.addEventListener("click", openSupport);
+  const btnSupportAbout = $("#btn-support-about");
+  if (btnSupportAbout) btnSupportAbout.addEventListener("click", openSupport);
+
   $("#btn-compat-go").addEventListener("click", () => {
     $("#global-question").value = $("#compat-q").value.trim();
     startSpread("compat");
@@ -753,8 +766,18 @@
     });
   });
 
+  async function loadPublicConfig() {
+    try {
+      if (!(await probeApi())) return;
+      const r = await api("/api/public-config");
+      if (r.support_username) CFG.SUPPORT_USERNAME = r.support_username;
+      if (r.support_bot) CFG.SUPPORT_BOT = r.support_bot;
+    } catch (_) {}
+  }
+
   // boot — сразу рисуем UI, без ожидания сети
   renderSpreads();
   show("home");
+  loadPublicConfig();
   refreshMe();
 })();

@@ -8,7 +8,7 @@ import re
 from datetime import date
 
 from aiogram import F, Router
-from aiogram.filters import Command, CommandStart
+from aiogram.filters import BaseFilter, Command, CommandStart
 from aiogram.types import (
     CallbackQuery,
     LabeledPrice,
@@ -16,14 +16,29 @@ from aiogram.types import (
     PreCheckoutQuery,
 )
 
+
 from bot import db as store
+from bot.admin import admin_ids, format_stats, is_admin, support_url
 from bot.cards import DECK, draw
-from bot.keyboards import after_spread, main_menu, open_app_inline, premium_inline
+from bot.keyboards import (
+    after_spread,
+    cancel_support_kb,
+    main_menu,
+    open_app_inline,
+    premium_inline,
+    support_inline,
+)
 from bot.llm import build_asc_day_prompt, build_spread_prompt, chat, fallback_spread_text
 from bot.premium import FREE_AI_READINGS_PER_DAY, PLANS, feature_allowed, plan_by_payload
 from bot.spreads import SPREADS
 from bot.tarot import TAROT_SPREADS, draw_tarot, tarot_to_dict
-from bot.texts import ASK_BIRTH, HELP, HOW_MONEY, NO_APP, PREMIUM_INFO, WELCOME
+from bot.texts import ASK_BIRTH, HELP, HOW_MONEY, NO_APP, PREMIUM_INFO, SUPPORT, WELCOME
+
+
+class IsAdminFilter(BaseFilter):
+    async def __call__(self, message: Message) -> bool:
+        return bool(message.from_user and is_admin(message.from_user.id))
+
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -32,6 +47,8 @@ router = Router()
 _waiting_birth: set[int] = set()
 # user_id -> last free-text question
 _last_question: dict[int, str] = {}
+# user_id -> waiting support message for owner
+_waiting_support: set[int] = set()
 
 BUTTON_TO_SPREAD = {
     "☀️ Карта дня": "day",
@@ -301,8 +318,12 @@ async def cmd_start(message: Message) -> None:
             reply_markup=app_kb,
         )
     args = (message.text or "").split(maxsplit=1)
-    if len(args) > 1 and args[1].strip().lower() in ("premium", "pay", "stars", "dostup", "доступ"):
-        await cmd_premium(message)
+    if len(args) > 1:
+        payload = args[1].strip().lower()
+        if payload in ("premium", "pay", "stars", "dostup", "доступ"):
+            await cmd_premium(message)
+        elif payload in ("podderzhka", "support", "help", "помощь", "поддержка"):
+            await cmd_support(message)
 
 
 @router.message(Command("app", "open", "menu", "приложение"))
@@ -368,9 +389,116 @@ async def btn_prem(message: Message) -> None:
     await cmd_premium(message)
 
 
+@router.message(F.text == "💬 Поддержка")
+async def btn_support(message: Message) -> None:
+    await cmd_support(message)
+
+
+@router.message(F.text == "✖️ Отмена")
+async def btn_cancel(message: Message) -> None:
+    if not message.from_user:
+        return
+    uid = message.from_user.id
+    _waiting_birth.discard(uid)
+    _waiting_support.discard(uid)
+    await message.answer("Отменено.", reply_markup=main_menu())
+
+
 @router.message(F.text == "🌅 День по восходящему")
 async def btn_asc(message: Message) -> None:
     await _run_asc_day(message)
+
+
+@router.message(Command("myid", "мойid", "id"))
+async def cmd_myid(message: Message) -> None:
+    """Полезно владельцу: узнать свой Telegram id для ADMIN_IDS."""
+    if not message.from_user:
+        return
+    u = message.from_user
+    await message.answer(
+        f"Ваш id: `{u.id}`\n"
+        f"Юзернейм: @{u.username or '—'}\n\n"
+        "_Для статистики владельца: добавьте этот id в переменную `ADMIN_IDS` на сервере._",
+        parse_mode="Markdown",
+        reply_markup=main_menu(),
+    )
+
+
+@router.message(Command("stats", "stat", "статистика", "admin"))
+async def cmd_stats(message: Message) -> None:
+    if not message.from_user or not is_admin(message.from_user.id):
+        await message.answer(
+            "Статистика доступна только владельцу.\n"
+            "Чтобы настроить: /myid → добавьте id в ADMIN_IDS.",
+            reply_markup=main_menu(),
+        )
+        return
+    stats = store.get_usage_stats()
+    text = format_stats(stats)
+    # recent users block
+    recent = stats.get("recent_users") or []
+    if recent:
+        lines = ["\n👤 **Последние пользователи:**"]
+        for r in recent:
+            un = f"@{r['username']}" if r.get("username") else r.get("first_name") or "—"
+            lines.append(f"  · `{r['user_id']}` {un}")
+        text += "\n" + "\n".join(lines)
+    await _send_long(message, text, parse_mode="Markdown", reply_markup=main_menu())
+
+
+@router.message(Command("podderzhka", "support", "helpme", "поддержка"))
+async def cmd_support(message: Message) -> None:
+    if message.from_user:
+        store.upsert_user(message.from_user.id, message.from_user.username, message.from_user.first_name)
+    await message.answer(SUPPORT, parse_mode="Markdown", reply_markup=support_inline())
+    if message.from_user:
+        _waiting_support.add(message.from_user.id)
+        await message.answer(
+            "Напишите сообщение — я перешлю автору.",
+            reply_markup=cancel_support_kb(),
+        )
+
+
+@router.callback_query(F.data == "support:write")
+async def cb_support_write(query: CallbackQuery) -> None:
+    await query.answer()
+    if query.from_user:
+        _waiting_support.add(query.from_user.id)
+    if query.message:
+        await query.message.answer(
+            "Напишите сообщение для автора 👇\n(или «✖️ Отмена»)",
+            reply_markup=cancel_support_kb(),
+        )
+
+
+async def _forward_support_to_admins(message: Message, text: str) -> bool:
+    """Переслать обращение всем админам. Возвращает True если хоть кому-то ушло."""
+    if not message.from_user or not message.bot:
+        return False
+    u = message.from_user
+    admins = admin_ids()
+    if not admins:
+        # fallback: если задан SUPPORT_USERNAME — хотя бы скажем открыть чат
+        return False
+
+    un = f"@{u.username}" if u.username else "без юзернейма"
+    header = (
+        f"💬 **Обращение в поддержку**\n"
+        f"От: {u.first_name or '—'} ({un})\n"
+        f"id: `{u.id}`\n\n"
+        f"{text}\n\n"
+        f"_Ответьте **реплаем** на это сообщение — ответ уйдёт пользователю._"
+    )
+    ok = False
+    tid = store.save_support_message(u.id, u.username, u.first_name, text)
+    for aid in admins:
+        try:
+            sent = await message.bot.send_message(aid, header, parse_mode="Markdown")
+            store.update_support_admin_msg(tid, aid, sent.message_id)
+            ok = True
+        except Exception as e:
+            logger.warning("support notify admin %s: %s", aid, e)
+    return ok
 
 
 @router.message(F.text.in_(set(BUTTON_TO_SPREAD)))
@@ -441,12 +569,65 @@ async def successful_payment(message: Message) -> None:
     await message.answer(text, parse_mode="Markdown", reply_markup=main_menu())
 
 
+@router.message(IsAdminFilter(), F.reply_to_message, F.text)
+async def admin_reply_to_support(message: Message) -> None:
+    """Админ отвечает реплаем на обращение — пересылаем пользователю."""
+    if not message.from_user or not message.text or not message.reply_to_message or not message.bot:
+        return
+    rt = message.reply_to_message
+    ticket = store.find_support_by_admin_message(message.chat.id, rt.message_id)
+    if not ticket:
+        return
+    target = int(ticket["user_id"])
+    try:
+        await message.bot.send_message(
+            target,
+            f"💬 **Ответ поддержки**\n\n{message.text}",
+            parse_mode="Markdown",
+            reply_markup=main_menu(),
+        )
+        await message.answer("✅ Отправлено пользователю.", reply_markup=main_menu())
+    except Exception as e:
+        await message.answer(f"Не удалось доставить: {e}")
+
+
 @router.message(F.text)
 async def text_router(message: Message) -> None:
     if not message.from_user or not message.text:
         return
     uid = message.from_user.id
     text = message.text.strip()
+
+    # support message to owner
+    if uid in _waiting_support:
+        _waiting_support.discard(uid)
+        if text in BUTTON_TO_SPREAD or text in (
+            "☀️ Карта дня",
+            "🌅 День по восходящему",
+            "⭐ Полный доступ",
+            "ℹ️ Помощь",
+            "💬 Поддержка",
+            "✖️ Отмена",
+            "✨ Красивое приложение",
+        ):
+            await message.answer("Отменено.", reply_markup=main_menu())
+            return
+        ok = await _forward_support_to_admins(message, text)
+        if ok:
+            await message.answer(
+                "✅ Сообщение отправлено автору. Ответ придёт сюда в бот.",
+                reply_markup=main_menu(),
+            )
+        else:
+            url = support_url()
+            extra = f"\nИли напишите напрямую: {url}" if url else ""
+            await message.answer(
+                "Пока не удалось переслать (не настроен ADMIN_IDS)." + extra,
+                reply_markup=main_menu(),
+            )
+            if url:
+                await message.answer("Кнопка связи:", reply_markup=support_inline())
+        return
 
     # waiting birth data
     if uid in _waiting_birth:

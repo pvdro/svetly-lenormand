@@ -112,8 +112,20 @@ def init_db() -> None:
                 created_at REAL
             );
 
+            CREATE TABLE IF NOT EXISTS support_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                username TEXT,
+                first_name TEXT,
+                text TEXT,
+                admin_chat_id INTEGER,
+                admin_message_id INTEGER,
+                created_at REAL
+            );
+
             CREATE INDEX IF NOT EXISTS idx_readings_user_day ON readings(user_id, day_key, kind);
             CREATE INDEX IF NOT EXISTS idx_profiles_user ON profiles(user_id);
+            CREATE INDEX IF NOT EXISTS idx_support_admin_msg ON support_messages(admin_chat_id, admin_message_id);
             """
         )
 
@@ -405,6 +417,134 @@ def cache_set(key: str, text: str, provider: str, model: str | None) -> None:
             "ON CONFLICT(cache_key) DO UPDATE SET text=excluded.text, provider=excluded.provider, "
             "model=excluded.model, created_at=excluded.created_at",
             (key, text, provider, model, time.time()),
+        )
+
+
+def get_usage_stats() -> dict[str, Any]:
+    """Сводка для владельца: пользователи, расклады, оплаты."""
+    now = time.time()
+    day_ago = now - 86400
+    week_ago = now - 7 * 86400
+    dk = today_key()
+
+    with db() as conn:
+        users_total = conn.execute("SELECT COUNT(*) AS c FROM users").fetchone()["c"]
+        users_today = conn.execute(
+            "SELECT COUNT(*) AS c FROM users WHERE created_at >= ?", (day_ago,)
+        ).fetchone()["c"]
+        users_7d = conn.execute(
+            "SELECT COUNT(*) AS c FROM users WHERE created_at >= ?", (week_ago,)
+        ).fetchone()["c"]
+
+        readings_total = conn.execute("SELECT COUNT(*) AS c FROM readings").fetchone()["c"]
+        readings_today = conn.execute(
+            "SELECT COUNT(*) AS c FROM readings WHERE day_key=? OR created_at >= ?",
+            (dk, day_ago),
+        ).fetchone()["c"]
+        readings_7d = conn.execute(
+            "SELECT COUNT(*) AS c FROM readings WHERE created_at >= ?", (week_ago,)
+        ).fetchone()["c"]
+        readings_with_ai = conn.execute(
+            "SELECT COUNT(*) AS c FROM readings WHERE ai_text IS NOT NULL AND length(ai_text) > 20"
+        ).fetchone()["c"]
+
+        active_today = conn.execute(
+            "SELECT COUNT(DISTINCT user_id) AS c FROM readings WHERE day_key=? OR created_at >= ?",
+            (dk, day_ago),
+        ).fetchone()["c"]
+        active_7d = conn.execute(
+            "SELECT COUNT(DISTINCT user_id) AS c FROM readings WHERE created_at >= ?",
+            (week_ago,),
+        ).fetchone()["c"]
+
+        premium_active = conn.execute(
+            "SELECT COUNT(*) AS c FROM premium WHERE until_ts > ?", (now,)
+        ).fetchone()["c"]
+
+        pay = conn.execute(
+            "SELECT COUNT(*) AS c, COALESCE(SUM(stars),0) AS s FROM payments"
+        ).fetchone()
+        pay_7d = conn.execute(
+            "SELECT COUNT(*) AS c, COALESCE(SUM(stars),0) AS s FROM payments WHERE created_at >= ?",
+            (week_ago,),
+        ).fetchone()
+
+        top_kinds = conn.execute(
+            "SELECT kind, COUNT(*) AS c FROM readings GROUP BY kind ORDER BY c DESC LIMIT 12"
+        ).fetchall()
+        top_today = conn.execute(
+            "SELECT kind, COUNT(*) AS c FROM readings WHERE day_key=? OR created_at >= ? "
+            "GROUP BY kind ORDER BY c DESC LIMIT 10",
+            (dk, day_ago),
+        ).fetchall()
+
+        recent_users = conn.execute(
+            "SELECT user_id, username, first_name, created_at FROM users "
+            "ORDER BY created_at DESC LIMIT 8"
+        ).fetchall()
+
+    return {
+        "users_total": int(users_total or 0),
+        "users_today": int(users_today or 0),
+        "users_7d": int(users_7d or 0),
+        "active_today": int(active_today or 0),
+        "active_7d": int(active_7d or 0),
+        "readings_total": int(readings_total or 0),
+        "readings_today": int(readings_today or 0),
+        "readings_7d": int(readings_7d or 0),
+        "readings_with_ai": int(readings_with_ai or 0),
+        "premium_active": int(premium_active or 0),
+        "payments_count": int(pay["c"] or 0),
+        "stars_total": int(pay["s"] or 0),
+        "payments_7d": int(pay_7d["c"] or 0),
+        "stars_7d": int(pay_7d["s"] or 0),
+        "top_kinds": [(r["kind"], int(r["c"])) for r in top_kinds],
+        "top_kinds_today": [(r["kind"], int(r["c"])) for r in top_today],
+        "recent_users": [dict(r) for r in recent_users],
+        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+    }
+
+
+def save_support_message(
+    user_id: int,
+    username: str | None,
+    first_name: str | None,
+    text: str,
+    admin_chat_id: int | None = None,
+    admin_message_id: int | None = None,
+) -> int:
+    with db() as conn:
+        cur = conn.execute(
+            "INSERT INTO support_messages(user_id, username, first_name, text, admin_chat_id, "
+            "admin_message_id, created_at) VALUES (?,?,?,?,?,?,?)",
+            (
+                user_id,
+                username,
+                first_name,
+                text,
+                admin_chat_id,
+                admin_message_id,
+                time.time(),
+            ),
+        )
+        return int(cur.lastrowid)
+
+
+def find_support_by_admin_message(admin_chat_id: int, admin_message_id: int) -> dict | None:
+    with db() as conn:
+        row = conn.execute(
+            "SELECT * FROM support_messages WHERE admin_chat_id=? AND admin_message_id=? "
+            "ORDER BY id DESC LIMIT 1",
+            (admin_chat_id, admin_message_id),
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def update_support_admin_msg(ticket_id: int, admin_chat_id: int, admin_message_id: int) -> None:
+    with db() as conn:
+        conn.execute(
+            "UPDATE support_messages SET admin_chat_id=?, admin_message_id=? WHERE id=?",
+            (admin_chat_id, admin_message_id, ticket_id),
         )
 
 

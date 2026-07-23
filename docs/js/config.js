@@ -4,4 +4,8 @@ window.APP_CONFIG = {
   API_BASE: "https://svetly-lenormand-production.up.railway.app",
   // таймаут, после которого работаем локально
   API_TIMEOUT_MS: 8000,
+  // поддержка: юзернейм без @ (кнопка «написать автору»)
+  SUPPORT_USERNAME: "",
+  // запасной deep-link в бот с командой поддержки
+  SUPPORT_BOT: "https://t.me/AstoManiabot?start=podderzhka",
 };
