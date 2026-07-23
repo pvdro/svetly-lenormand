@@ -18,9 +18,8 @@ RUN pip install --upgrade pip && pip install -r requirements.txt
 
 COPY . .
 
-# persist sqlite if volume mounted
-RUN mkdir -p /app/data
-VOLUME ["/app/data"]
+# SQLite data directory (Railway Volume optional, attach separately if needed)
+RUN mkdir -p /app/data && chmod 777 /app/data
 
 EXPOSE 8080
 
