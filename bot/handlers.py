@@ -592,14 +592,15 @@ async def cmd_support(message: Message) -> None:
         store.upsert_user(message.from_user.id, message.from_user.username, message.from_user.first_name)
         lang = _lang(message.from_user.id, getattr(message.from_user, "language_code", None))
     await message.answer(t("support", lang), parse_mode="Markdown", reply_markup=support_inline(lang))
-    if message.from_user and admin_ids():
+    # всегда принимаем текст в боте (если есть ADMIN_IDS — уйдёт владельцу)
+    if message.from_user:
         _waiting_support.add(message.from_user.id)
         await message.answer(
             t("support_write", lang),
             reply_markup=cancel_support_kb(lang),
         )
-    elif not support_url():
-        await message.answer(t("support_fail", lang), reply_markup=main_menu())
+    if message.from_user and not admin_ids():
+        logger.warning("support: ADMIN_IDS empty — messages cannot be forwarded")
 
 
 @router.callback_query(F.data == "support:menu")
@@ -899,11 +900,7 @@ async def text_router(message: Message) -> None:
         if ok:
             await message.answer(t("support_sent", lang), reply_markup=main_menu())
         else:
-            url = support_url()
-            extra = f"\n{url}" if url else ""
-            await message.answer(t("support_fail", lang) + extra, reply_markup=main_menu())
-            if url:
-                await message.answer(t("btn_support", lang), reply_markup=support_inline(lang))
+            await message.answer(t("support_fail", lang), reply_markup=main_menu())
         return
 
     # waiting birth data

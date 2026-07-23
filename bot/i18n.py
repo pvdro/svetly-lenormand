@@ -81,32 +81,38 @@ STRINGS: dict[str, dict[str, str]] = {
     "support": {
         "ru": (
             "💬 **Поддержка**\n\n"
-            "Напишите вопрос или идею — сообщение уйдёт **автору**.\n"
-            "Можно открыть чат с автором кнопкой ниже.\n\n"
+            "Пишите **только здесь, в боте** — личные сообщения автору закрыты.\n"
+            "Нажмите кнопку ниже и отправьте текст: я перешлю автору.\n"
+            "Ответ придёт **сюда же**, в бот.\n\n"
             "Отмена — «✖️ Отмена»."
         ),
         "en": (
             "💬 **Support**\n\n"
-            "Send a question or idea — it goes to the **author**.\n"
-            "Or open a chat with the author via the button below.\n\n"
+            "Please write **only here in the bot** — direct DMs to the author are closed.\n"
+            "Tap the button below and send your message — it will be forwarded.\n"
+            "The reply will arrive **here in the bot**.\n\n"
             "Cancel — «✖️ Cancel»."
         ),
     },
     "support_write": {
-        "ru": "Напишите сообщение — я перешлю автору.",
-        "en": "Type your message — I’ll forward it to the author.",
+        "ru": "Напишите сообщение — перешлю автору. Ответ придёт в этот чат.",
+        "en": "Type your message — I’ll forward it. The reply will come here.",
     },
     "support_write_cb": {
-        "ru": "Напишите сообщение для автора 👇\n(или «✖️ Отмена»)",
-        "en": "Write a message for the author 👇\n(or «✖️ Cancel»)",
+        "ru": "Напишите сообщение для поддержки 👇\n(или «✖️ Отмена»)",
+        "en": "Write your support message 👇\n(or «✖️ Cancel»)",
     },
     "support_sent": {
-        "ru": "✅ Сообщение отправлено автору. Ответ придёт сюда в бот.",
-        "en": "✅ Message sent to the author. The reply will arrive here.",
+        "ru": "✅ Сообщение отправлено. Ответ придёт сюда, в бот — не в личку.",
+        "en": "✅ Message sent. The reply will arrive here in the bot — not in DMs.",
     },
     "support_fail": {
-        "ru": "Пока не удалось переслать (не настроен ADMIN_IDS).",
-        "en": "Couldn’t forward yet (ADMIN_IDS is not set).",
+        "ru": "Пока не удалось переслать. Попробуйте чуть позже или /podderzhka ещё раз.",
+        "en": "Couldn’t forward just now. Try again later or /support once more.",
+    },
+    "btn_support_here": {
+        "ru": "✉️ Написать в поддержку",
+        "en": "✉️ Write to support",
     },
     "premium": {
         "ru": (
@@ -163,12 +169,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "Open the app 👇",
     },
     "btn_support_chat": {
-        "ru": "💬 Открыть чат с автором",
-        "en": "💬 Message the author",
-    },
-    "btn_support_here": {
-        "ru": "✉️ Написать здесь в боте",
-        "en": "✉️ Write here in the bot",
+        "ru": "💬 Поддержка в боте",
+        "en": "💬 Support in the bot",
     },
     "btn_to_app": {
         "ru": "✨ В приложение",

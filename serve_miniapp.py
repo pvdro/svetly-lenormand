@@ -91,16 +91,18 @@ class Handler(SimpleHTTPRequestHandler):
 
             return _json(self, 200, provider_status())
         if path == "/api/public-config":
-            from bot.admin import support_url, support_username
+            from bot.admin import support_url
 
             return _json(
                 self,
                 200,
                 {
-                    "support_username": support_username() or None,
+                    # личный юзернейм не отдаём — только бот
+                    "support_username": None,
                     "support_url": support_url(),
                     "support_bot": "https://t.me/AstoManiabot?start=podderzhka",
                     "bot": "https://t.me/AstoManiabot",
+                    "support_via_bot_only": True,
                 },
             )
         if path == "/api/admin/stats":

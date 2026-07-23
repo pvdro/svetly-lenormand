@@ -949,11 +949,10 @@
   $("#btn-about").addEventListener("click", () => show("about"));
 
   function openSupport() {
-    const u = (CFG.SUPPORT_USERNAME || "").replace(/^@/, "");
+    // только бот — без перехода в личный профиль автора
     const bot = CFG.SUPPORT_BOT || "https://t.me/AstoManiabot?start=podderzhka";
-    const url = u ? `https://t.me/${u}` : bot;
-    if (tg && tg.openTelegramLink) tg.openTelegramLink(url);
-    else window.open(url, "_blank");
+    if (tg && tg.openTelegramLink) tg.openTelegramLink(bot);
+    else window.open(bot, "_blank");
   }
   const btnSupport = $("#btn-support");
   if (btnSupport) btnSupport.addEventListener("click", openSupport);
@@ -1003,7 +1002,7 @@
     try {
       if (!(await probeApi())) return;
       const r = await fetchWithTimeout(API_BASE + "/api/public-config", {}, 5000).then((x) => x.json());
-      if (r.support_username) CFG.SUPPORT_USERNAME = r.support_username;
+      // username автора намеренно не подставляем
       if (r.support_bot) CFG.SUPPORT_BOT = r.support_bot;
     } catch (_) {}
   }

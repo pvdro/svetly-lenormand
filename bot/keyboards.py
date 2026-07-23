@@ -69,13 +69,17 @@ def open_app_inline(lang: str = "ru") -> InlineKeyboardMarkup | None:
 
 
 def support_inline(lang: str = "ru") -> InlineKeyboardMarkup:
+    """Поддержка только через бота — без ссылки в личный профиль."""
     from bot.admin import admin_ids
 
     rows: list[list[InlineKeyboardButton]] = []
-    sup = support_url()
-    if sup:
-        rows.append([InlineKeyboardButton(text=t("btn_support_chat", lang), url=sup)])
+    # писать здесь в боте (пересылка владельцу)
     if admin_ids():
+        rows.append(
+            [InlineKeyboardButton(text=t("btn_support_here", lang), callback_data="support:write")]
+        )
+    else:
+        # если ADMIN_IDS ещё нет — хотя бы команда
         rows.append(
             [InlineKeyboardButton(text=t("btn_support_here", lang), callback_data="support:write")]
         )
@@ -89,10 +93,6 @@ def support_inline(lang: str = "ru") -> InlineKeyboardMarkup:
                     web_app=WebAppInfo(url=f"{url}{sep}lang={lang}"),
                 )
             ]
-        )
-    if not rows:
-        rows.append(
-            [InlineKeyboardButton(text="🤖 Bot", url="https://t.me/AstoManiabot")]
         )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -123,9 +123,9 @@ def premium_inline(lang: str = "ru") -> InlineKeyboardMarkup:
                 )
             ]
         )
-    sup = support_url()
-    if sup:
-        rows.append([InlineKeyboardButton(text=t("btn_support", lang), url=sup)])
+    rows.append(
+        [InlineKeyboardButton(text=t("btn_support", lang), callback_data="support:menu")]
+    )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 

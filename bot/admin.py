@@ -26,15 +26,27 @@ def is_admin(user_id: int | None) -> bool:
 
 
 def support_username() -> str:
-    """Юзернейм без @ для кнопки «написать»."""
+    """Личный юзернейм владельца — не для публичных кнопок (только внутреннее)."""
     u = _env("SUPPORT_USERNAME") or _env("OWNER_USERNAME")
     return u.lstrip("@")
 
 
+def support_via_bot_only() -> bool:
+    """По умолчанию писать только через бота, не в личку автору."""
+    v = (_env("SUPPORT_VIA_BOT_ONLY") or "1").lower()
+    return v not in ("0", "false", "no", "off")
+
+
 def support_url() -> str | None:
+    """
+    Публичная ссылка поддержки.
+    По умолчанию — deep-link в бота (/podderzhka), не личный профиль.
+    """
+    if support_via_bot_only():
+        return "https://t.me/AstoManiabot?start=podderzhka"
     u = support_username()
     if not u:
-        return None
+        return "https://t.me/AstoManiabot?start=podderzhka"
     return f"https://t.me/{u}"
 
 
