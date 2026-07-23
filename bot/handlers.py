@@ -465,7 +465,18 @@ async def cmd_start(message: Message) -> None:
                 except Exception:
                     pass
 
-    # welcome с фото и именем пользователя (сброс reply-клавиатуры — в welcome / main_menu)
+    # tip_N из Mini App — сразу счёт, без длинного welcome
+    tip_m = re.match(r"^tip[_-]?(\d+)$", payload or "")
+    if tip_m:
+        stars = int(tip_m.group(1))
+        await message.answer(
+            "💛 " + (f"Счёт на {stars} ⭐ — оплатите ниже" if lang == "ru" else f"Invoice for {stars} ⭐ — pay below"),
+            reply_markup=main_menu(),
+        )
+        await _send_tip_invoice(message, stars, lang)
+        return
+
+    # welcome с фото и именем пользователя
     await _send_welcome(message, lang, user=user)
 
     # deep-link actions / spreads → open app with startapp-like hint

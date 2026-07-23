@@ -141,7 +141,10 @@
     about: $("#view-about"),
     ownerStats: $("#view-owner-stats"),
     invite: $("#view-invite"),
+    thanks: $("#view-thanks"),
   };
+
+  const TIP_PRESETS = [1, 5, 10, 25, 50, 100, 250];
 
   function initData() {
     if (tg && tg.initData) return tg.initData;
@@ -1088,16 +1091,48 @@
   const btnSupportAbout = $("#btn-support-about");
   if (btnSupportAbout) btnSupportAbout.addEventListener("click", openSupport);
 
-  function openThanks() {
+  function payTipStars(n) {
+    const stars = parseInt(n, 10);
+    if (!stars || stars < 1 || stars > 100000) {
+      alert(tr("thanks_bad"));
+      return;
+    }
     const bot = CFG.BOT_USERNAME || "AstoManiabot";
-    const url = `https://t.me/${bot}?start=spasibo`;
+    // deep-link: бот сразу выставит счёт на N звёзд
+    const url = `https://t.me/${bot}?start=tip_${stars}`;
     if (tg && tg.openTelegramLink) tg.openTelegramLink(url);
     else window.open(url, "_blank");
+  }
+
+  function renderTipGrid() {
+    const grid = $("#tip-grid");
+    if (!grid) return;
+    grid.innerHTML = "";
+    TIP_PRESETS.forEach((n) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "tip-tile";
+      b.innerHTML = `<span class="stars">⭐</span>${n}`;
+      b.addEventListener("click", () => payTipStars(n));
+      grid.appendChild(b);
+    });
+  }
+
+  function openThanks() {
+    renderTipGrid();
+    show("thanks");
   }
   const btnThanks = $("#btn-thanks");
   if (btnThanks) btnThanks.addEventListener("click", openThanks);
   const btnResultThanks = $("#btn-result-thanks");
   if (btnResultThanks) btnResultThanks.addEventListener("click", openThanks);
+  const btnTipCustom = $("#btn-tip-custom");
+  if (btnTipCustom) {
+    btnTipCustom.addEventListener("click", () => {
+      const el = $("#tip-custom");
+      payTipStars(el && el.value);
+    });
+  }
   const btnShareStory = $("#btn-result-share-text");
   if (btnShareStory) btnShareStory.addEventListener("click", shareStoryText);
 

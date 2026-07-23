@@ -912,6 +912,30 @@ h3.section-title {
   font-weight: 600;
   color: var(--ink);
 }
+.tip-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+  margin-top: 12px;
+}
+.tip-tile {
+  border: 0;
+  border-radius: var(--radius-sm);
+  padding: 16px 10px;
+  background: rgba(255,255,255,0.85);
+  box-shadow: var(--shadow-soft);
+  font: inherit;
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--ink);
+  cursor: pointer;
+}
+.tip-tile:active { transform: scale(0.97); }
+.tip-tile .stars {
+  display: block;
+  font-size: 22px;
+  margin-bottom: 4px;
+}
 .question-box {
   margin-bottom: 12px;
   position: relative;
