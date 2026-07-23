@@ -3,7 +3,7 @@ window.ASTRO_I18N = {
   ru: {
     brand: "Астромания",
     hello: "Привет, {name} ✨",
-    eyebrow: "бесплатно · с теплом",
+    eyebrow: "с теплом · без страшилок",
     tagline: "Ленорман · Таро Райдера–Уэйта · день по восходящему знаку",
     status_loading: "Прогноз: …",
     pill_personal: "личное · 1×/день",
@@ -77,7 +77,7 @@ window.ASTRO_I18N = {
   en: {
     brand: "Astromania",
     hello: "Hi, {name} ✨",
-    eyebrow: "free · with care",
+    eyebrow: "gentle · no fear",
     tagline: "Lenormand · Rider–Waite Tarot · day by rising sign",
     status_loading: "Reading: …",
     pill_personal: "personal · 1×/day",
