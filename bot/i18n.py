@@ -63,7 +63,8 @@ STRINGS: dict[str, dict[str, str]] = {
             "2. Ленорман, Таро, день по восходящему знаку.\n"
             "3. **Полный доступ** — /dostup (звёзды).\n"
             "4. **Поддержка** — /podderzhka.\n"
-            "5. **Язык** — /lang.\n\n"
+            "5. **Спасибо автору** — /spasibo (любое число звёзд).\n"
+            "6. **Язык** — /lang.\n\n"
             "Это поддержка и зеркало, не приговор и не медицина."
         ),
         "en": (
@@ -72,7 +73,8 @@ STRINGS: dict[str, dict[str, str]] = {
             "2. Lenormand, Tarot, day by rising sign.\n"
             "3. **Full access** — /premium (Telegram Stars).\n"
             "4. **Support** — /support.\n"
-            "5. **Language** — /lang.\n\n"
+            "5. **Thank the author** — /thanks (any Stars amount).\n"
+            "6. **Language** — /lang.\n\n"
             "This is a gentle mirror, not a verdict or medical advice."
         ),
     },
@@ -213,6 +215,42 @@ STRINGS: dict[str, dict[str, str]] = {
     "llm_lang_note": {
         "ru": "Пиши только по-русски, без англицизмов. Тон светлый и бережный.",
         "en": "Write only in English, warm and gentle. No scare tactics.",
+    },
+    "thanks_title": {
+        "ru": "💛 **Спасибо автору**\n\n"
+        "Если Астромания откликнулась — можно поддержать звёздами.\n"
+        "Любая сумма: выберите кнопку или введите своё число.",
+        "en": "💛 **Thank the author**\n\n"
+        "If Astromania helped you — support with Stars.\n"
+        "Any amount: pick a button or type your own number.",
+    },
+    "thanks_custom": {
+        "ru": "✏️ Своё число",
+        "en": "✏️ Custom amount",
+    },
+    "thanks_ask_amount": {
+        "ru": "Введите число звёзд (от 1), например: `15`\nОтмена — «✖️ Отмена».",
+        "en": "Send a number of Stars (from 1), e.g. `15`\nCancel — «✖️ Cancel».",
+    },
+    "thanks_bad_amount": {
+        "ru": "Нужно целое число от 1 до 100000. Пример: `10`",
+        "en": "Need a whole number from 1 to 100000. Example: `10`",
+    },
+    "thanks_invoice_title": {
+        "ru": "Спасибо автору",
+        "en": "Thank the author",
+    },
+    "thanks_invoice_desc": {
+        "ru": "Благодарность создателю Астромании · {stars} ⭐",
+        "en": "A thank-you to the Astromania creator · {stars} ⭐",
+    },
+    "thanks_done": {
+        "ru": "💛 Спасибо за поддержку! Это очень греет.",
+        "en": "💛 Thank you for the support! It means a lot.",
+    },
+    "btn_thanks": {
+        "ru": "💛 Спасибо автору",
+        "en": "💛 Thank the author",
     },
 }
 

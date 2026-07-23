@@ -64,7 +64,28 @@ def plan_by_payload(payload: str) -> dict[str, Any] | None:
     for p in PLANS.values():
         if p["payload"] == payload or payload.startswith(p["payload"]):
             return p
+    # благодарность: tip:123
+    if payload.startswith("tip:"):
+        try:
+            stars = int(payload.split(":", 1)[1])
+        except Exception:
+            return None
+        if stars < 1 or stars > 100_000:
+            return None
+        return {
+            "id": "tip",
+            "title": "Thank you",
+            "description": "Support the author",
+            "stars": stars,
+            "days": 0,
+            "payload": payload,
+            "tip": True,
+        }
     return None
+
+
+# быстрые варианты для «спасибо» (звёзды)
+TIP_PRESETS = (1, 5, 10, 25, 50, 100, 250)
 
 
 def feature_allowed(feature: str, *, is_premium: bool, free_ai_left: int) -> dict[str, Any]:

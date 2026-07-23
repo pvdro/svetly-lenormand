@@ -14,7 +14,7 @@ from aiogram.types import (
 
 from bot.admin import support_url
 from bot.i18n import t
-from bot.premium import PLANS
+from bot.premium import PLANS, TIP_PRESETS
 
 
 def miniapp_url() -> str:
@@ -55,7 +55,12 @@ def open_app_inline(lang: str = "ru") -> InlineKeyboardMarkup | None:
         [
             InlineKeyboardButton(text="🇷🇺", callback_data="lang:ru"),
             InlineKeyboardButton(text="🇬🇧", callback_data="lang:en"),
+        ]
+    )
+    rows.append(
+        [
             InlineKeyboardButton(text=t("btn_full", lang), callback_data="buy:premium_30"),
+            InlineKeyboardButton(text=t("btn_thanks", lang), callback_data="thanks:menu"),
         ]
     )
     if not rows:
@@ -149,3 +154,20 @@ def cancel_support_kb(lang: str = "ru") -> ReplyKeyboardMarkup:
         resize_keyboard=True,
         one_time_keyboard=True,
     )
+
+
+def thanks_inline(lang: str = "ru") -> InlineKeyboardMarkup:
+    """Быстрые суммы + своё число звёзд."""
+    rows: list[list[InlineKeyboardButton]] = []
+    row: list[InlineKeyboardButton] = []
+    for n in TIP_PRESETS:
+        row.append(InlineKeyboardButton(text=f"⭐ {n}", callback_data=f"tip:{n}"))
+        if len(row) == 4:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+    rows.append(
+        [InlineKeyboardButton(text=t("thanks_custom", lang), callback_data="tip:custom")]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)

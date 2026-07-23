@@ -31,6 +31,7 @@ from bot.keyboards import (
     open_app_inline,
     premium_inline,
     support_inline,
+    thanks_inline,
 )
 from bot.llm import build_asc_day_prompt, build_spread_prompt, chat, fallback_spread_text
 from bot.premium import FREE_AI_READINGS_PER_DAY, PLANS, feature_allowed, plan_by_payload
@@ -59,6 +60,8 @@ _waiting_birth: set[int] = set()
 _last_question: dict[int, str] = {}
 # user_id -> waiting support message for owner
 _waiting_support: set[int] = set()
+# user_id -> waiting custom tip stars amount
+_waiting_tip: set[int] = set()
 
 BUTTON_TO_SPREAD = {
     "☀️ Карта дня": "day",
@@ -409,6 +412,8 @@ async def cmd_start(message: Message) -> None:
         await cmd_support(message)
     elif payload in ("lang", "language", "язык"):
         await cmd_lang(message)
+    elif payload in ("spasibo", "thanks", "tip", "donate", "спасибо"):
+        await cmd_thanks(message)
 
 
 @router.message(Command("lang", "language", "язык", "language_code"))
@@ -523,6 +528,7 @@ async def btn_cancel(message: Message) -> None:
     lang = _lang(uid, getattr(message.from_user, "language_code", None))
     _waiting_birth.discard(uid)
     _waiting_support.discard(uid)
+    _waiting_tip.discard(uid)
     await message.answer(t("cancelled", lang), reply_markup=main_menu())
     kb = open_app_inline(lang)
     if kb:
@@ -680,6 +686,86 @@ async def cb_spread(query: CallbackQuery) -> None:
             await query.message.answer(t("open_app_msg", lang), reply_markup=kb)
 
 
+async def _send_tip_invoice(message: Message, stars: int, lang: str) -> None:
+    stars = int(stars)
+    if stars < 1 or stars > 100_000:
+        await message.answer(t("thanks_bad_amount", lang))
+        return
+    title = t("thanks_invoice_title", lang)
+    desc = t("thanks_invoice_desc", lang, stars=stars)
+    prices = [LabeledPrice(label=title, amount=stars)]
+    await message.answer_invoice(
+        title=title,
+        description=desc[:255],
+        payload=f"tip:{stars}",
+        currency="XTR",
+        prices=prices,
+        provider_token="",
+    )
+
+
+@router.callback_query(F.data == "thanks:menu")
+async def cb_thanks_menu(query: CallbackQuery) -> None:
+    await query.answer()
+    lang = _lang(
+        query.from_user.id if query.from_user else None,
+        getattr(query.from_user, "language_code", None) if query.from_user else None,
+    )
+    if query.message:
+        await query.message.answer(
+            t("thanks_title", lang),
+            parse_mode="Markdown",
+            reply_markup=thanks_inline(lang),
+        )
+
+
+@router.message(Command("spasibo", "thanks", "tip", "donate", "спасибо", "благодарность"))
+async def cmd_thanks(message: Message) -> None:
+    if message.from_user:
+        store.upsert_user(message.from_user.id, message.from_user.username, message.from_user.first_name)
+    lang = _lang(
+        message.from_user.id if message.from_user else None,
+        getattr(message.from_user, "language_code", None) if message.from_user else None,
+    )
+    # optional: /tip 25
+    parts = (message.text or "").split(maxsplit=1)
+    if len(parts) > 1 and parts[1].strip().isdigit():
+        await _send_tip_invoice(message, int(parts[1].strip()), lang)
+        return
+    await message.answer(
+        t("thanks_title", lang),
+        parse_mode="Markdown",
+        reply_markup=thanks_inline(lang),
+    )
+
+
+@router.callback_query(F.data.startswith("tip:"))
+async def cb_tip(query: CallbackQuery) -> None:
+    lang = _lang(
+        query.from_user.id if query.from_user else None,
+        getattr(query.from_user, "language_code", None) if query.from_user else None,
+    )
+    raw = (query.data or "tip:1").split(":", 1)[1]
+    if raw == "custom":
+        await query.answer()
+        if query.from_user:
+            _waiting_tip.add(query.from_user.id)
+            _waiting_support.discard(query.from_user.id)
+        if query.message:
+            await query.message.answer(
+                t("thanks_ask_amount", lang),
+                parse_mode="Markdown",
+                reply_markup=cancel_support_kb(lang),
+            )
+        return
+    if not raw.isdigit():
+        await query.answer(t("thanks_bad_amount", lang), show_alert=True)
+        return
+    await query.answer()
+    if query.message:
+        await _send_tip_invoice(query.message, int(raw), lang)
+
+
 @router.callback_query(F.data.startswith("buy:"))
 async def cb_buy(query: CallbackQuery) -> None:
     plan_id = (query.data or "").split(":", 1)[1]
@@ -703,7 +789,7 @@ async def cb_buy(query: CallbackQuery) -> None:
 async def pre_checkout(query: PreCheckoutQuery) -> None:
     plan = plan_by_payload(query.invoice_payload or "")
     if not plan:
-        await query.answer(ok=False, error_message="Неизвестный тариф")
+        await query.answer(ok=False, error_message="Unknown invoice")
         return
     await query.answer(ok=True)
 
@@ -713,19 +799,48 @@ async def successful_payment(message: Message) -> None:
     sp = message.successful_payment
     if not sp or not message.from_user:
         return
-    plan = plan_by_payload(sp.invoice_payload)
+    payload = sp.invoice_payload or ""
+    plan = plan_by_payload(payload)
     if not plan:
-        await message.answer("Оплата получена, но тариф не распознан.")
+        await message.answer("Payment received.")
         return
     uid = message.from_user.id
+    lang = _lang(uid, getattr(message.from_user, "language_code", None))
     store.upsert_user(uid, message.from_user.username, message.from_user.first_name)
-    store.record_payment(uid, sp.invoice_payload, int(sp.total_amount), plan["id"], sp.telegram_payment_charge_id or "")
+    stars = int(sp.total_amount)
+    store.record_payment(
+        uid, payload, stars, plan["id"], sp.telegram_payment_charge_id or ""
+    )
+
+    if plan.get("tip"):
+        text = t("thanks_done", lang)
+        await message.answer(text, reply_markup=open_app_inline(lang) or main_menu())
+        # уведомить владельца
+        un = f"@{message.from_user.username}" if message.from_user.username else message.from_user.first_name or "—"
+        for aid in admin_ids():
+            try:
+                await message.bot.send_message(
+                    aid,
+                    f"💛 Благодарность: {stars} ⭐ от {un} (id {uid})",
+                )
+            except Exception:
+                pass
+        return
+
     if plan.get("one_shot"):
         store.grant_premium(uid, days=1, plan="deep_once")
-        text = "⭐ Спасибо! **Глубокий разбор** открыт на сутки. Выберите расклад «Путь» или «Месяц»."
+        text = (
+            "⭐ Спасибо! **Глубокий разбор** открыт на сутки."
+            if lang == "ru"
+            else "⭐ Thank you! **Deep reading** is open for 24h."
+        )
     else:
         store.grant_premium(uid, days=int(plan["days"]), plan=plan["id"])
-        text = f"⭐ Спасибо! **Полный доступ** на **{plan['days']} дн.**"
+        text = (
+            f"⭐ Спасибо! **Полный доступ** на **{plan['days']} дн.**"
+            if lang == "ru"
+            else f"⭐ Thank you! **Full access** for **{plan['days']} days.**"
+        )
     await message.answer(text, parse_mode="Markdown", reply_markup=main_menu())
 
 
@@ -758,6 +873,16 @@ async def text_router(message: Message) -> None:
     uid = message.from_user.id
     text = message.text.strip()
     lang = _lang(uid, getattr(message.from_user, "language_code", None))
+
+    # custom tip amount
+    if uid in _waiting_tip:
+        _waiting_tip.discard(uid)
+        raw = text.replace("⭐", "").replace("звёзд", "").replace("звезд", "").replace("stars", "").strip()
+        if raw.isdigit():
+            await _send_tip_invoice(message, int(raw), lang)
+        else:
+            await message.answer(t("thanks_bad_amount", lang), reply_markup=thanks_inline(lang))
+        return
 
     # support message to owner
     if uid in _waiting_support:

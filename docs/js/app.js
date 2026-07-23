@@ -960,6 +960,14 @@
   const btnSupportAbout = $("#btn-support-about");
   if (btnSupportAbout) btnSupportAbout.addEventListener("click", openSupport);
 
+  function openThanks() {
+    const url = "https://t.me/AstoManiabot?start=spasibo";
+    if (tg && tg.openTelegramLink) tg.openTelegramLink(url);
+    else window.open(url, "_blank");
+  }
+  const btnThanks = $("#btn-thanks");
+  if (btnThanks) btnThanks.addEventListener("click", openThanks);
+
   const btnOwner = $("#btn-owner-stats");
   if (btnOwner) btnOwner.addEventListener("click", loadOwnerStats);
   const btnOwnerRefresh = $("#btn-owner-stats-refresh");
