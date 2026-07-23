@@ -89,20 +89,39 @@ def _lang(user_id: int | None, telegram_code: str | None = None) -> str:
 
 
 def _name(user) -> str:
+    """Имя человека (не бота)."""
     if not user:
         return t("fallback_name", "ru")
-    return (user.first_name or user.username or t("fallback_name", "ru")).strip()
+    # сообщение бота / callback на чужом message — from_user может быть бот
+    if getattr(user, "is_bot", False):
+        return t("fallback_name", "ru")
+    raw = (getattr(user, "first_name", None) or getattr(user, "username", None) or "").strip()
+    # не подставлять бренд, если вдруг first_name совпал
+    if not raw or raw.lower() in ("астромания", "astromania", "astomaniabot"):
+        return t("fallback_name", "ru")
+    # убрать markdown-символы, чтобы не сломать parse_mode
+    for ch in ("*", "_", "`", "[", "]"):
+        raw = raw.replace(ch, "")
+    return raw[:64] or t("fallback_name", "ru")
 
 
-async def _send_welcome(message: Message, lang: str) -> None:
-    """Красивое фото + приветствие с именем + кнопка приложения."""
-    name = _name(message.from_user)
+async def _send_welcome(message: Message, lang: str, user=None) -> None:
+    """Красивое фото + приветствие с именем пользователя + кнопка приложения."""
+    # всегда предпочитаем явно переданного user (callback → query.from_user)
+    person = user or message.from_user
+    if person and getattr(person, "is_bot", False):
+        person = user  # если message.from_user — бот, а user не передан, fallback
+    name = _name(person if person and not getattr(person, "is_bot", False) else user)
+    # если всё ещё пусто — fallback
+    if not name or name.lower() in ("астромания", "astromania"):
+        name = t("fallback_name", lang)
+
     caption = t("welcome", lang, name=name)
     kb = open_app_inline(lang)
     try:
         if WELCOME_IMAGE.exists():
             photo = FSInputFile(str(WELCOME_IMAGE))
-            # caption limit ~1024
+            # caption limit ~1024; welcome целиком обычно короче
             short = caption if len(caption) <= 1000 else t("welcome_caption", lang, name=name)
             await message.answer_photo(
                 photo,
@@ -438,9 +457,9 @@ async def cmd_start(message: Message) -> None:
                 except Exception:
                     pass
 
-    # сброс старой нижней клавиатуры + welcome с фото
+    # сброс старой нижней клавиатуры + welcome с фото и именем пользователя
     await message.answer("\u200b", reply_markup=main_menu())
-    await _send_welcome(message, lang)
+    await _send_welcome(message, lang, user=user)
 
     # deep-link actions / spreads → open app with startapp-like hint
     SPREAD_PAYLOADS = {
@@ -558,7 +577,8 @@ async def cb_lang(query: CallbackQuery) -> None:
 
         # use real message
         await query.message.answer(t("lang_set", lang), reply_markup=main_menu())
-        await _send_welcome(query.message, lang)
+        # важно: query.from_user — человек; query.message.from_user — часто сам бот
+        await _send_welcome(query.message, lang, user=query.from_user)
 
 
 @router.message(Command("app", "open", "menu", "приложение"))

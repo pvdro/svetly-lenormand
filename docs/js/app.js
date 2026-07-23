@@ -39,6 +39,33 @@
     return pack[key] || (I18N.ru && I18N.ru[key]) || key;
   }
 
+  function tgUserName() {
+    try {
+      const u =
+        (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) ||
+        (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initDataUnsafe && window.Telegram.WebApp.initDataUnsafe.user);
+      if (!u) return "";
+      const n = (u.first_name || u.username || "").trim();
+      if (!n || /астромания|astromania/i.test(n)) return "";
+      return n;
+    } catch (_) {
+      return "";
+    }
+  }
+
+  function applyHello() {
+    const el = $("#hero-hello");
+    if (!el) return;
+    const name = tgUserName();
+    if (!name) {
+      el.textContent = "";
+      el.classList.add("hidden");
+      return;
+    }
+    el.classList.remove("hidden");
+    el.textContent = tr("hello").replace("{name}", name);
+  }
+
   function applyI18n() {
     document.querySelectorAll("[data-i18n]").forEach((el) => {
       const k = el.getAttribute("data-i18n");
@@ -52,6 +79,7 @@
       btn.classList.toggle("active", btn.getAttribute("data-set-lang") === uiLang);
     });
     document.documentElement.lang = uiLang;
+    applyHello();
   }
 
   async function setLang(lang, { persist = true } = {}) {
@@ -1097,14 +1125,7 @@
       else window.open(url, "_blank");
     });
   }
-  const btnYt = $("#btn-youtube");
-  if (btnYt) {
-    btnYt.addEventListener("click", () => {
-      const url = CFG.YOUTUBE_URL || "https://www.youtube.com";
-      if (tg && tg.openLink) tg.openLink(url);
-      else window.open(url, "_blank");
-    });
-  }
+
 
   const btnOwner = $("#btn-owner-stats");
   if (btnOwner) btnOwner.addEventListener("click", loadOwnerStats);

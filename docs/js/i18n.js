@@ -2,6 +2,7 @@
 window.ASTRO_I18N = {
   ru: {
     brand: "Астромания",
+    hello: "Привет, {name} ✨",
     eyebrow: "бесплатно · с теплом",
     tagline: "Ленорман · Таро Райдера–Уэйта · день по восходящему знаку",
     status_loading: "Прогноз: …",
@@ -32,7 +33,6 @@ window.ASTRO_I18N = {
     btn_menu: "В меню",
     btn_invite: "Пригласить друга (+прогноз)",
     btn_notify: "Утреннее напоминание",
-    btn_youtube: "Видео / YouTube",
     btn_copy: "Скопировать ссылку",
     btn_stats: "Статистика (владелец)",
     section_quick: "Быстрый старт",

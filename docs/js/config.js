@@ -7,7 +7,5 @@ window.APP_CONFIG = {
   // поддержка только через бота (не личка автора)
   SUPPORT_USERNAME: "",
   SUPPORT_BOT: "https://t.me/AstoManiabot?start=podderzhka",
-  // YouTube / контент (можно заменить на свой канал)
-  YOUTUBE_URL: "https://www.youtube.com/@AstoMania",
   BOT_USERNAME: "AstoManiabot",
 };
