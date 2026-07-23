@@ -112,6 +112,7 @@
     card: $("#view-card"),
     about: $("#view-about"),
     ownerStats: $("#view-owner-stats"),
+    invite: $("#view-invite"),
   };
 
   function initData() {
@@ -326,6 +327,8 @@
             : tr("free")
         );
         toggleOwnerUi(!!me.is_owner);
+        updateStreak(me.streak || 0);
+        if (me.ref_code) window.__REF_CODE = me.ref_code;
         if (me.profile && me.profile.sign) {
           saveLocalProfile(me.profile);
           const chip = $("#profile-chip");
@@ -349,6 +352,56 @@
   function toggleOwnerUi(isOwner) {
     const btn = $("#btn-owner-stats");
     if (btn) btn.classList.toggle("hidden", !isOwner);
+  }
+
+  function updateStreak(n) {
+    const chip = $("#streak-chip");
+    const txt = $("#streak-text");
+    if (!chip || !txt) return;
+    if (n && n > 0) {
+      chip.classList.remove("hidden");
+      txt.textContent = `🔥 ${n} ${tr("streak_label")}`;
+    } else {
+      chip.classList.add("hidden");
+    }
+  }
+
+  function openQuick(id) {
+    if (id === "day") openDay("day");
+    else if (id === "t_day") startSpread("t_day");
+    else startSpread(id);
+  }
+
+  function handleDeepLink() {
+    let spread = null;
+    try {
+      const q = new URLSearchParams(location.search);
+      spread = q.get("spread") || q.get("startapp") || q.get("startApp");
+    } catch (_) {}
+    try {
+      const sp = tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param;
+      if (sp) spread = sp;
+    } catch (_) {}
+    if (!spread) return;
+    spread = String(spread).toLowerCase();
+    const map = {
+      day: "day",
+      t_day: "t_day",
+      tarot: "t_day",
+      three: "three",
+      love: "love",
+      yesno: "yesno",
+      work: "work",
+      situation: "situation",
+      path: "path",
+      asc: "asc_day",
+      asc_day: "asc_day",
+    };
+    const sid = map[spread] || spread;
+    setTimeout(() => {
+      if (sid === "day" || sid === "asc_day") openDay(sid);
+      else if ((data.spreads || []).some((s) => s.id === sid)) startSpread(sid);
+    }, 400);
   }
 
   function renderSpreads() {
@@ -569,6 +622,48 @@
     try {
       tg && tg.HapticFeedback && tg.HapticFeedback.notificationOccurred("success");
     } catch (_) {}
+  }
+
+  function shareStoryText() {
+    const r = lastResultPayload;
+    if (!r) return;
+    const names = (r.cards || []).map((c) => `${c.emoji || ""} ${c.name}`).join(", ");
+    const q = r.question ? (uiLang === "en" ? `Question: ${r.question}\n` : `Вопрос: ${r.question}\n`) : "";
+    const brand = uiLang === "en" ? "Astromania" : "Астромания";
+    const text =
+      uiLang === "en"
+        ? `${brand} ✨\n${r.title || "Reading"}\n${q}${names}\n\nt.me/${CFG.BOT_USERNAME || "AstoManiabot"}`
+        : `${brand} ✨\n${r.title || "Расклад"}\n${q}${names}\n\nt.me/${CFG.BOT_USERNAME || "AstoManiabot"}`;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(() => {
+        alert(uiLang === "en" ? "Text copied — paste into Stories" : "Текст скопирован — вставьте в Stories");
+      }).catch(() => alert(text));
+    } else {
+      alert(text);
+    }
+    // also try telegram share if available
+    try {
+      if (tg && tg.openTelegramLink) {
+        const url = `https://t.me/share/url?url=${encodeURIComponent("https://t.me/" + (CFG.BOT_USERNAME || "AstoManiabot"))}&text=${encodeURIComponent(text)}`;
+        // don't auto-open; user uses copy. optional second button already
+      }
+    } catch (_) {}
+  }
+
+  async function showInvite() {
+    let code = window.__REF_CODE;
+    if (!code && (await probeApi())) {
+      try {
+        const me2 = await api("/api/me");
+        code = me2.ref_code;
+        window.__REF_CODE = code;
+      } catch (_) {}
+    }
+    code = code || "friend";
+    const link = `https://t.me/${CFG.BOT_USERNAME || "AstoManiabot"}?start=ref_${code}`;
+    const el = $("#invite-link");
+    if (el) el.textContent = link;
+    show("invite");
   }
 
   function escapeHtml(s) {
@@ -853,10 +948,16 @@
     ctx.fillRect(0, 0, w, h);
     ctx.fillStyle = "#3a2f36";
     ctx.font = "600 48px Georgia, serif";
-    ctx.fillText("Астромания", 80, 120);
+    ctx.fillText(uiLang === "en" ? "Astromania" : "Астромания", 80, 120);
     ctx.font = "28px sans-serif";
     ctx.fillStyle = "#9a8790";
-    ctx.fillText(r.title || "Расклад", 80, 180);
+    ctx.fillText(r.title || (uiLang === "en" ? "Reading" : "Расклад"), 80, 180);
+    if (r.question) {
+      ctx.font = "22px sans-serif";
+      ctx.fillStyle = "#6b5a63";
+      const qline = (r.question || "").slice(0, 48);
+      ctx.fillText(qline, 80, 230);
+    }
     (r.cards || []).slice(0, 3).forEach((c, i) => {
       const x = 80 + i * 300;
       const y = 320;
@@ -960,12 +1061,50 @@
   if (btnSupportAbout) btnSupportAbout.addEventListener("click", openSupport);
 
   function openThanks() {
-    const url = "https://t.me/AstoManiabot?start=spasibo";
+    const bot = CFG.BOT_USERNAME || "AstoManiabot";
+    const url = `https://t.me/${bot}?start=spasibo`;
     if (tg && tg.openTelegramLink) tg.openTelegramLink(url);
     else window.open(url, "_blank");
   }
   const btnThanks = $("#btn-thanks");
   if (btnThanks) btnThanks.addEventListener("click", openThanks);
+  const btnResultThanks = $("#btn-result-thanks");
+  if (btnResultThanks) btnResultThanks.addEventListener("click", openThanks);
+  const btnShareStory = $("#btn-result-share-text");
+  if (btnShareStory) btnShareStory.addEventListener("click", shareStoryText);
+
+  document.querySelectorAll("[data-quick]").forEach((btn) => {
+    btn.addEventListener("click", () => openQuick(btn.getAttribute("data-quick")));
+  });
+
+  const btnInvite = $("#btn-invite");
+  if (btnInvite) btnInvite.addEventListener("click", showInvite);
+  const btnCopyInvite = $("#btn-copy-invite");
+  if (btnCopyInvite) {
+    btnCopyInvite.addEventListener("click", () => {
+      const link = ($("#invite-link") && $("#invite-link").textContent) || "";
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(link).then(() => alert(tr("invite_copied")));
+      } else alert(link);
+    });
+  }
+  const btnNotify = $("#btn-notify");
+  if (btnNotify) {
+    btnNotify.addEventListener("click", () => {
+      const bot = CFG.BOT_USERNAME || "AstoManiabot";
+      const url = `https://t.me/${bot}?start=notify`;
+      if (tg && tg.openTelegramLink) tg.openTelegramLink(url);
+      else window.open(url, "_blank");
+    });
+  }
+  const btnYt = $("#btn-youtube");
+  if (btnYt) {
+    btnYt.addEventListener("click", () => {
+      const url = CFG.YOUTUBE_URL || "https://www.youtube.com";
+      if (tg && tg.openLink) tg.openLink(url);
+      else window.open(url, "_blank");
+    });
+  }
 
   const btnOwner = $("#btn-owner-stats");
   if (btnOwner) btnOwner.addEventListener("click", loadOwnerStats);
@@ -1019,5 +1158,5 @@
   restoreQuestion();
   renderSpreads();
   show("home");
-  loadPublicConfig().finally(() => refreshMe());
+  loadPublicConfig().finally(() => refreshMe().then(() => handleDeepLink()));
 })();

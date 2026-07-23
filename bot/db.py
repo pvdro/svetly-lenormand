@@ -130,8 +130,23 @@ def init_db() -> None:
         )
         # миграции мягко
         cols = {r[1] for r in conn.execute("PRAGMA table_info(users)").fetchall()}
-        if "lang" not in cols:
-            conn.execute("ALTER TABLE users ADD COLUMN lang TEXT")
+        for col, decl in (
+            ("lang", "TEXT"),
+            ("ref_code", "TEXT"),
+            ("referred_by", "INTEGER"),
+            ("bonus_ai", "INTEGER DEFAULT 0"),
+            ("streak_count", "INTEGER DEFAULT 0"),
+            ("streak_last_day", "TEXT"),
+            ("notify", "INTEGER DEFAULT 0"),
+        ):
+            if col not in cols:
+                try:
+                    conn.execute(f"ALTER TABLE users ADD COLUMN {col} {decl}")
+                except Exception:
+                    pass
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_ref_code ON users(ref_code) WHERE ref_code IS NOT NULL"
+        )
 
 
 def upsert_user(
@@ -332,6 +347,143 @@ def count_ai_today(user_id: int) -> int:
         if row["free_ai_used_date"] != dk:
             return 0
         return int(row["free_ai_count"] or 0)
+
+
+def get_bonus_ai(user_id: int) -> int:
+    with db() as conn:
+        row = conn.execute("SELECT bonus_ai FROM users WHERE user_id=?", (user_id,)).fetchone()
+    if not row:
+        return 0
+    try:
+        return max(0, int(row["bonus_ai"] or 0))
+    except Exception:
+        return 0
+
+
+def add_bonus_ai(user_id: int, n: int = 1) -> int:
+    """Добавить бонусные живые прогнозы (не сбрасываются по суткам, пока не израсходованы)."""
+    n = max(0, int(n))
+    upsert_user(user_id)
+    with db() as conn:
+        row = conn.execute("SELECT bonus_ai FROM users WHERE user_id=?", (user_id,)).fetchone()
+        cur = max(0, int((row["bonus_ai"] if row else 0) or 0)) + n
+        conn.execute(
+            "UPDATE users SET bonus_ai=?, updated_at=? WHERE user_id=?",
+            (cur, time.time(), user_id),
+        )
+        return cur
+
+
+def consume_ai_quota(user_id: int, *, free_limit: int = 3) -> dict[str, Any]:
+    """
+    Списать один живой прогноз.
+    Сначала дневной free_limit, затем bonus_ai.
+    """
+    used = count_ai_today(user_id)
+    bonus = get_bonus_ai(user_id)
+    if used < free_limit:
+        inc_ai_today(user_id)
+        return {"ok": True, "source": "daily", "used": used + 1, "bonus_left": bonus}
+    if bonus > 0:
+        with db() as conn:
+            conn.execute(
+                "UPDATE users SET bonus_ai=?, updated_at=? WHERE user_id=?",
+                (bonus - 1, time.time(), user_id),
+            )
+        return {"ok": True, "source": "bonus", "used": used, "bonus_left": bonus - 1}
+    return {"ok": False, "source": None, "used": used, "bonus_left": 0}
+
+
+def free_ai_left(user_id: int, *, free_limit: int = 3) -> int:
+    used = count_ai_today(user_id)
+    daily_left = max(0, free_limit - used)
+    return daily_left + get_bonus_ai(user_id)
+
+
+def get_or_create_ref_code(user_id: int) -> str:
+    import secrets
+
+    upsert_user(user_id)
+    with db() as conn:
+        row = conn.execute("SELECT ref_code FROM users WHERE user_id=?", (user_id,)).fetchone()
+        if row and row["ref_code"]:
+            return str(row["ref_code"])
+        for _ in range(8):
+            code = secrets.token_hex(3)  # 6 hex chars
+            exists = conn.execute("SELECT 1 FROM users WHERE ref_code=?", (code,)).fetchone()
+            if not exists:
+                conn.execute(
+                    "UPDATE users SET ref_code=?, updated_at=? WHERE user_id=?",
+                    (code, time.time(), user_id),
+                )
+                return code
+    return str(user_id)
+
+
+def apply_referral(new_user_id: int, ref_code: str) -> dict[str, Any]:
+    """Привязать реферала. Бонус: +1 прогноз новому, +1 пригласившему (один раз)."""
+    ref_code = (ref_code or "").strip().lower()
+    if not ref_code:
+        return {"ok": False, "reason": "empty"}
+    with db() as conn:
+        inviter = conn.execute(
+            "SELECT user_id FROM users WHERE lower(ref_code)=?", (ref_code,)
+        ).fetchone()
+        if not inviter:
+            return {"ok": False, "reason": "not_found"}
+        inviter_id = int(inviter["user_id"])
+        if inviter_id == new_user_id:
+            return {"ok": False, "reason": "self"}
+        me = conn.execute(
+            "SELECT referred_by FROM users WHERE user_id=?", (new_user_id,)
+        ).fetchone()
+        if me and me["referred_by"]:
+            return {"ok": False, "reason": "already"}
+    upsert_user(new_user_id)
+    with db() as conn:
+        conn.execute(
+            "UPDATE users SET referred_by=?, updated_at=? WHERE user_id=?",
+            (inviter_id, time.time(), new_user_id),
+        )
+    add_bonus_ai(new_user_id, 1)
+    add_bonus_ai(inviter_id, 1)
+    return {"ok": True, "inviter_id": inviter_id}
+
+
+def touch_day_streak(user_id: int) -> dict[str, Any]:
+    """Обновить серию дней с картой дня. Возвращает streak_count."""
+    dk = today_key()
+    upsert_user(user_id)
+    with db() as conn:
+        row = conn.execute(
+            "SELECT streak_count, streak_last_day FROM users WHERE user_id=?",
+            (user_id,),
+        ).fetchone()
+        last = (row["streak_last_day"] if row else None) or ""
+        count = int((row["streak_count"] if row else 0) or 0)
+        if last == dk:
+            return {"streak": count, "updated": False, "day": dk}
+        # вчера?
+        from datetime import datetime as dt, timedelta
+        try:
+            yday = (dt.fromisoformat(dk) - timedelta(days=1)).date().isoformat()
+        except Exception:
+            yday = ""
+        if last == yday:
+            count = count + 1
+        else:
+            count = 1
+        conn.execute(
+            "UPDATE users SET streak_count=?, streak_last_day=?, updated_at=? WHERE user_id=?",
+            (count, dk, time.time(), user_id),
+        )
+        return {"streak": count, "updated": True, "day": dk}
+
+
+def get_streak(user_id: int) -> int:
+    with db() as conn:
+        row = conn.execute("SELECT streak_count FROM users WHERE user_id=?", (user_id,)).fetchone()
+    return int((row["streak_count"] if row else 0) or 0)
 
 
 def inc_ai_today(user_id: int) -> int:

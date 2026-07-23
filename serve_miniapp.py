@@ -163,7 +163,7 @@ class Handler(SimpleHTTPRequestHandler):
         uid = user["id"]
         prem = store.premium_info(uid)
         used = store.count_ai_today(uid)
-        left = max(0, FREE_AI_READINGS_PER_DAY - used) if not prem["active"] else 999
+        left = 999 if prem["active"] else store.free_ai_left(uid, free_limit=FREE_AI_READINGS_PER_DAY)
         prof = store.get_default_profile(uid)
         lang = normalize_lang(store.get_user_lang(uid) or "ru")
         _json(
@@ -175,6 +175,9 @@ class Handler(SimpleHTTPRequestHandler):
                 "free_ai_used": used,
                 "free_ai_left": left,
                 "free_ai_limit": FREE_AI_READINGS_PER_DAY,
+                "bonus_ai": store.get_bonus_ai(uid),
+                "streak": store.get_streak(uid),
+                "ref_code": store.get_or_create_ref_code(uid),
                 "profile": prof,
                 "premium_only": list(PREMIUM_ONLY),
                 "is_owner": is_admin(uid),
@@ -495,8 +498,7 @@ class Handler(SimpleHTTPRequestHandler):
         )
 
         if want_ai:
-            used = store.count_ai_today(uid)
-            left = 999 if prem else max(0, FREE_AI_READINGS_PER_DAY - used)
+            left = 999 if prem else store.free_ai_left(uid, free_limit=FREE_AI_READINGS_PER_DAY)
             agate = feature_allowed("ai", is_premium=prem, free_ai_left=left)
             if not agate["ok"]:
                 rid = store.save_reading(
@@ -547,7 +549,7 @@ class Handler(SimpleHTTPRequestHandler):
                     ai_flag = True
                     store.cache_set(cache_key, ai_text, provider, model)
                     if not prem:
-                        store.inc_ai_today(uid)
+                        store.consume_ai_quota(uid, free_limit=FREE_AI_READINGS_PER_DAY)
                 except Exception as e:
                     ai_text = fallback_spread_text(cards_d, spread_title)
                     provider = "fallback"
@@ -586,7 +588,7 @@ class Handler(SimpleHTTPRequestHandler):
                 "free_ai_left": (
                     999
                     if prem
-                    else max(0, FREE_AI_READINGS_PER_DAY - store.count_ai_today(uid))
+                    else store.free_ai_left(uid, free_limit=FREE_AI_READINGS_PER_DAY)
                 ),
             },
         )
@@ -683,8 +685,7 @@ class Handler(SimpleHTTPRequestHandler):
             meta = {}
 
         prem = store.is_premium(uid)
-        used = store.count_ai_today(uid)
-        left = 999 if prem else max(0, FREE_AI_READINGS_PER_DAY - used)
+        left = 999 if prem else store.free_ai_left(uid, free_limit=FREE_AI_READINGS_PER_DAY)
         ai_text = None
         provider = model = None
         ai_flag = False
@@ -701,7 +702,7 @@ class Handler(SimpleHTTPRequestHandler):
                     ai_flag = True
                     store.cache_set(ck, ai_text, provider, model)
                     if not prem:
-                        store.inc_ai_today(uid)
+                        store.consume_ai_quota(uid, free_limit=FREE_AI_READINGS_PER_DAY)
                 except Exception as e:
                     ai_text = fallback_spread_text(cards_d, title) + f"\n\n_(Прогноз: {e})_"
                     provider = "fallback"
@@ -709,6 +710,8 @@ class Handler(SimpleHTTPRequestHandler):
             ai_text = fallback_spread_text(cards_d, title)
             meta["limit"] = agate
 
+        if kind in ("day", "t_day", "asc_day"):
+            store.touch_day_streak(uid)
         rid = store.save_reading(uid, kind, title, None, cards_d, ai_text, {**meta, "provider": provider, "model": model})
         _json(
             self,
@@ -726,7 +729,7 @@ class Handler(SimpleHTTPRequestHandler):
                 "meta": meta,
                 "day_key": store.today_key(),
                 "premium": store.premium_info(uid),
-                "free_ai_left": 999 if prem else max(0, FREE_AI_READINGS_PER_DAY - store.count_ai_today(uid)),
+                "free_ai_left": 999 if prem else store.free_ai_left(uid, free_limit=FREE_AI_READINGS_PER_DAY),
             },
         )
 

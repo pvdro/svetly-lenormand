@@ -232,8 +232,7 @@ async def _run_spread(message: Message, spread_id: str, question: str | None = N
             f"**{pos}**\n{c['emoji']} **{c['name']}**\n_{c['keywords']}_\n{body}\n"
         )
 
-    used = store.count_ai_today(uid)
-    left = 999 if prem else max(0, FREE_AI_READINGS_PER_DAY - used)
+    left = 999 if prem else store.free_ai_left(uid, free_limit=FREE_AI_READINGS_PER_DAY)
     agate = feature_allowed("ai", is_premium=prem, free_ai_left=left)
 
     lang = _lang(uid, getattr(message.from_user, "language_code", None) if message.from_user else None)
@@ -255,7 +254,7 @@ async def _run_spread(message: Message, spread_id: str, question: str | None = N
         try:
             ai_text, provider, model = chat(prompt, system=system_prompt(lang))
             if not prem:
-                store.inc_ai_today(uid)
+                store.consume_ai_quota(uid, free_limit=FREE_AI_READINGS_PER_DAY)
             lines.append(f"\n✨ **Живой прогноз**\n{ai_text}" if lang == "ru" else f"\n✨ **Live reading**\n{ai_text}")
         except Exception as e:
             ai_text = fallback_spread_text(cards_d, spread_title)
@@ -265,6 +264,8 @@ async def _run_spread(message: Message, spread_id: str, question: str | None = N
         ai_text = "\n".join(lines)
 
     text = "\n".join(lines)
+    if spread_id in ("day", "t_day"):
+        store.touch_day_streak(uid)
     store.save_reading(
         uid,
         spread_id,
@@ -276,6 +277,17 @@ async def _run_spread(message: Message, spread_id: str, question: str | None = N
         day_key=store.today_key() if spread_id in ("day", "t_day") else store.today_key(),
     )
     await _send_long(message, text, parse_mode="Markdown", reply_markup=after_spread(spread_id, lang))
+    # soft CTA: thank + invite
+    try:
+        from bot.keyboards import thanks_inline
+        await message.answer(
+            "💛 " + ("Понравилось? Можно сказать спасибо звёздами или пригласить друга /invite"
+                     if lang == "ru" else
+                     "Liked it? Say thanks with Stars or invite a friend /invite"),
+            reply_markup=thanks_inline(lang),
+        )
+    except Exception:
+        pass
 
 
 def _parse_birth(text: str) -> tuple[str, str, str] | None:
@@ -344,8 +356,7 @@ async def _run_asc_day(message: Message) -> None:
         card=cards_d[0],
     )
     prem = store.is_premium(uid)
-    used = store.count_ai_today(uid)
-    left = 999 if prem else max(0, FREE_AI_READINGS_PER_DAY - used)
+    left = 999 if prem else store.free_ai_left(uid, free_limit=FREE_AI_READINGS_PER_DAY)
     agate = feature_allowed("ai", is_premium=prem, free_ai_left=left)
 
     header = (
@@ -357,13 +368,14 @@ async def _run_asc_day(message: Message) -> None:
         try:
             ai_text, _, _ = chat(prompt, system=system_prompt(lang))
             if not prem:
-                store.inc_ai_today(uid)
+                store.consume_ai_quota(uid, free_limit=FREE_AI_READINGS_PER_DAY)
             text = header + (f"\n✨ **Живой прогноз**\n{ai_text}" if lang == "ru" else f"\n✨ **Live reading**\n{ai_text}")
         except Exception as e:
             text = header + f"\n✨\n{fallback_spread_text(cards_d, 'Day')}\n\n_({e})_"
     else:
         text = header + f"\n_{agate['message']}_"
 
+    store.touch_day_streak(uid)
     store.save_reading(uid, "asc_day", f"День · {prof['sign']}", None, cards_d, text, {"profile": prof["sign"], "lang": lang})
     await _send_long(message, text, parse_mode="Markdown", reply_markup=main_menu())
 
@@ -379,6 +391,13 @@ async def cmd_start(message: Message) -> None:
     args = (message.text or "").split(maxsplit=1)
     payload = args[1].strip().lower() if len(args) > 1 else ""
 
+    # referral: ref_XXXX or refXXXX
+    ref_code = None
+    if payload.startswith("ref_"):
+        ref_code = payload[4:]
+    elif payload.startswith("ref") and len(payload) > 3:
+        ref_code = payload[3:]
+
     # deep-link language
     if payload in ("en", "lang_en", "english"):
         if user:
@@ -389,23 +408,52 @@ async def cmd_start(message: Message) -> None:
             store.set_user_lang(user.id, "ru")
         lang = "ru"
     elif not saved:
-        # первый заход — предложить язык (учитываем Telegram language_code)
         guess = normalize_lang(tg_lang)
         await message.answer(
             t("choose_lang", guess),
             reply_markup=language_inline(),
         )
-        # всё равно покажем welcome на угаданном языке + фото
         if user and not saved:
             store.set_user_lang(user.id, guess)
         lang = guess
     else:
         lang = normalize_lang(saved)
 
+    if user and ref_code:
+        res = store.apply_referral(user.id, ref_code)
+        if res.get("ok"):
+            await message.answer(
+                "🎁 " + ("Бонус: +1 живой прогноз вам и другу!" if lang == "ru"
+                         else "🎁 Bonus: +1 live reading for you and your friend!")
+            )
+            inv = res.get("inviter_id")
+            if inv:
+                try:
+                    await message.bot.send_message(
+                        inv,
+                        "🎁 " + ("По вашей ссылке пришёл друг — вам +1 живой прогноз!"
+                                 if lang == "ru" else
+                                 "A friend joined via your link — you get +1 live reading!"),
+                    )
+                except Exception:
+                    pass
+
     # сброс старой нижней клавиатуры + welcome с фото
     await message.answer("\u200b", reply_markup=main_menu())
     await _send_welcome(message, lang)
 
+    # deep-link actions / spreads → open app with startapp-like hint
+    SPREAD_PAYLOADS = {
+        "day": "day", "card": "day", "карта": "day",
+        "t_day": "t_day", "tarot": "t_day", "таро": "t_day",
+        "three": "three", "три": "three",
+        "love": "love", "любовь": "love",
+        "yesno": "yesno", "данет": "yesno",
+        "situation": "situation", "ситуация": "situation",
+        "work": "work", "дело": "work",
+        "path": "path", "путь": "path",
+        "asc": "asc_day", "asc_day": "asc_day", "восходящий": "asc_day",
+    }
     if payload in ("premium", "pay", "stars", "dostup", "доступ"):
         await cmd_premium(message)
     elif payload in ("podderzhka", "support", "help", "помощь", "поддержка"):
@@ -414,6 +462,72 @@ async def cmd_start(message: Message) -> None:
         await cmd_lang(message)
     elif payload in ("spasibo", "thanks", "tip", "donate", "спасибо"):
         await cmd_thanks(message)
+    elif payload in ("invite", "ref", "реферал", "друг"):
+        await cmd_invite(message)
+    elif payload in ("notify", "утро", "morning"):
+        await cmd_notify(message)
+    elif payload in SPREAD_PAYLOADS:
+        sid = SPREAD_PAYLOADS[payload]
+        from bot.keyboards import miniapp_url
+        from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
+        url = miniapp_url()
+        if url:
+            sep = "&" if "?" in url else "?"
+            app = f"{url}{sep}lang={lang}&spread={sid}"
+            await message.answer(
+                "✨ " + ("Откройте расклад в приложении:" if lang == "ru" else "Open the spread in the app:"),
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                    InlineKeyboardButton(
+                        text=t("open_app", lang),
+                        web_app=WebAppInfo(url=app),
+                    )
+                ]]),
+            )
+
+
+@router.message(Command("invite", "ref", "друг", "реферал"))
+async def cmd_invite(message: Message) -> None:
+    if not message.from_user:
+        return
+    uid = message.from_user.id
+    lang = _lang(uid, getattr(message.from_user, "language_code", None))
+    code = store.get_or_create_ref_code(uid)
+    link = f"https://t.me/AstoManiabot?start=ref_{code}"
+    bonus = store.get_bonus_ai(uid)
+    if lang == "en":
+        text = (
+            f"🎁 **Invite a friend**\n\n"
+            f"Share this link. When they start the bot, you both get **+1 live reading**.\n\n"
+            f"`{link}`\n\n"
+            f"Your bonus readings left: **{bonus}**"
+        )
+    else:
+        text = (
+            f"🎁 **Пригласить друга**\n\n"
+            f"Отправьте ссылку. Когда друг нажмёт /start — вам обоим **+1 живой прогноз**.\n\n"
+            f"`{link}`\n\n"
+            f"Ваши бонусные прогнозы: **{bonus}**"
+        )
+    await message.answer(text, parse_mode="Markdown", disable_web_page_preview=True)
+
+
+@router.message(Command("notify", "утро", "morning", "напоминание"))
+async def cmd_notify(message: Message) -> None:
+    if not message.from_user:
+        return
+    uid = message.from_user.id
+    lang = _lang(uid, getattr(message.from_user, "language_code", None))
+    # toggle
+    with store.db() as conn:
+        row = conn.execute("SELECT notify FROM users WHERE user_id=?", (uid,)).fetchone()
+        cur = int((row["notify"] if row else 0) or 0)
+    new = 0 if cur else 1
+    store.set_notify(uid, enabled=bool(new), hour=9, tz="Europe/Moscow")
+    if new:
+        msg = "🔔 Утренние напоминания включены (около 9:00 МСК)." if lang == "ru" else "🔔 Morning reminders on (~9:00 MSK)."
+    else:
+        msg = "🔕 Напоминания выключены." if lang == "ru" else "🔕 Reminders off."
+    await message.answer(msg)
 
 
 @router.message(Command("lang", "language", "язык", "language_code"))
@@ -508,14 +622,20 @@ async def cmd_status(message: Message) -> None:
     lang = _lang(message.from_user.id, getattr(message.from_user, "language_code", None))
     info = store.premium_info(message.from_user.id)
     used = store.count_ai_today(message.from_user.id)
+    left = store.free_ai_left(message.from_user.id, free_limit=FREE_AI_READINGS_PER_DAY)
+    streak = store.get_streak(message.from_user.id)
     if info["active"]:
         await message.answer(
-            t("status_prem", lang, until=info["until"][:10]),
+            t("status_prem", lang, until=info["until"][:10])
+            + (f"\n🔥 streak: {streak}" if streak else ""),
             reply_markup=open_app_inline(lang),
         )
     else:
+        extra = f"\n🔥 {streak} " + ("дн. подряд" if lang == "ru" else "day streak") if streak else ""
+        extra += f"\n🎁 bonus: {store.get_bonus_ai(message.from_user.id)}"
         await message.answer(
-            t("status_free", lang, used=used),
+            t("status_free", lang, used=used) + f"\n" + (f"Осталось сегодня (с бонусом): {left}" if lang == "ru" else f"Left today (with bonus): {left}")
+            + extra,
             reply_markup=open_app_inline(lang),
         )
 
