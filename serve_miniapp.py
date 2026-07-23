@@ -252,11 +252,11 @@ class Handler(SimpleHTTPRequestHandler):
             1,
             {
                 "id": "asc_day",
-                "title": "День по восходящему",
+                "title": "День по восходящему знаку",
                 "emoji": "🌅",
                 "n": 1,
                 "positions": ["Карта дня"],
-                "blurb": "Личный день через восходящий знак и карту Ленорман",
+                "blurb": "Личный день через восходящий знак и карту",
                 "focus": "general",
                 "premium": False,
                 "system": "lenormand",
@@ -617,7 +617,7 @@ class Handler(SimpleHTTPRequestHandler):
                     "advice": card.advice,
                 }
             ]
-            title = f"День по восходящему · {prof['sign']}"
+            title = f"День по восходящему знаку · {prof['sign']}"
             prompt = build_asc_day_prompt(
                 sign=prof["sign"],
                 emoji=prof.get("emoji") or "✦",

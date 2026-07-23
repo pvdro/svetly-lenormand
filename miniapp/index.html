@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#FFF8F2" />
-  <title>Светлый Ленорман</title>
+  <title>Астомания</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -27,7 +27,8 @@
           <div class="hero-banner-fade"></div>
           <div class="hero-banner-text">
             <p class="eyebrow">бесплатно · с теплом</p>
-            <h1>Светлый Ленорман</h1>
+            <h1>Астомания</h1>
+            <p class="hero-tagline">Ленорман · Таро · день по восходящему знаку</p>
           </div>
         </div>
         <div class="status-bar" id="status-bar">
@@ -40,9 +41,9 @@
         <div class="hero-glow"></div>
         <div class="hero-content">
           <span class="pill">личное · 1×/день</span>
-          <h2>День по восходящему</h2>
-          <p id="asc-hero-sub">Рассчитайте восходящий знак — мягкий ориентир дня</p>
-          <span class="cta" id="asc-hero-cta">Открыть ↗</span>
+          <h2>День по восходящему знаку</h2>
+          <p id="asc-hero-sub">Рассчитайте восходящий знак — мягкий ориентир на сегодня</p>
+          <span class="cta" id="asc-hero-cta">Открыть день ↗</span>
         </div>
         <div class="hero-stack" aria-hidden="true">
           <div class="mini-card back"></div>
@@ -155,15 +156,15 @@
     <section id="view-profile" class="view">
       <button type="button" class="back-btn" data-go="home">← Назад</button>
       <p class="eyebrow">восходящий знак</p>
-      <h2>Дата, время и место</h2>
+      <h2>Дата, время и место рождения</h2>
       <form id="profile-form" class="profile-form">
         <label class="field"><span>Имя профиля</span><input type="text" id="f-label" value="Я" maxlength="40" /></label>
         <label class="field"><span>Дата рождения</span><input type="date" id="f-date" required /></label>
         <label class="field"><span>Время (местное)</span><input type="time" id="f-time" required /></label>
-        <p class="field-hint">Не знаете время — поставьте 12:00 (восходящий будет приблизительным).</p>
+        <p class="field-hint">Не знаете точное время — поставьте 12:00 (восходящий знак будет приблизительным).</p>
         <label class="field"><span>Место рождения</span><input type="text" id="f-place" required placeholder="Москва" /></label>
         <p class="form-error hidden" id="form-error"></p>
-        <button type="submit" class="primary-btn" id="btn-calc-asc"><span id="calc-label">Рассчитать восходящий</span></button>
+        <button type="submit" class="primary-btn" id="btn-calc-asc"><span id="calc-label">Рассчитать восходящий знак</span></button>
       </form>
     </section>
 
@@ -171,7 +172,7 @@
     <section id="view-profiles" class="view">
       <button type="button" class="back-btn" data-go="home">← Назад</button>
       <h2>Профили</h2>
-      <p class="muted">Я / партнёр / близкий — для восходящего и совместимости</p>
+      <p class="muted">Я / партнёр / близкий — для восходящего знака и совместимости</p>
       <div id="profiles-list"></div>
       <button type="button" class="primary-btn" id="btn-new-profile" style="margin-top:16px">+ Новый профиль</button>
     </section>
@@ -246,9 +247,9 @@
       <button type="button" class="back-btn" data-go="home">← Назад</button>
       <h2>С теплом</h2>
       <div class="about-card">
-        <p>Ленорман и Таро Райдера–Уэйта, восходящий знак и живой тёплый прогноз. Светлый тон, без страшилок.</p>
+        <p><strong>Астомания</strong> — светлые расклады Ленорман и Таро Райдера–Уэйта, день по восходящему знаку и тёплый прогноз. Без страшилок.</p>
         <ul>
-          <li>Карта дня и день по восходящему — раз в сутки</li>
+          <li>Карта дня и день по восходящему знаку — раз в сутки</li>
           <li>Живой прогноз: бесплатно 3 в сутки · полный доступ без ограничения</li>
           <li>Оплата звёздами Телеграма ⭐</li>
           <li>Поддержка — связь с автором в один шаг</li>
@@ -259,8 +260,8 @@
     </section>
   </div>
 
-  <script src="js/config.js?v=20260723b"></script>
-  <script src="js/data.js?v=20260723b"></script>
-  <script src="js/app.js?v=20260723b"></script>
+  <script src="js/config.js?v=20260723c"></script>
+  <script src="js/data.js?v=20260723c"></script>
+  <script src="js/app.js?v=20260723c"></script>
 </body>
 </html>

@@ -261,13 +261,13 @@ async def _run_asc_day(message: Message) -> None:
     if existing and existing.get("ai_text"):
         await _send_long(
             message,
-            f"🌅 **День по восходящему** (уже на сегодня)\n\n{existing['ai_text']}",
+            f"🌅 **День по восходящему знаку** (уже на сегодня)\n\n{existing['ai_text']}",
             parse_mode="Markdown",
             reply_markup=main_menu(),
         )
         return
 
-    await message.answer("🕊️ Считаю день по восходящему…")
+    await message.answer("🕊️ Считаю день по восходящему знаку…")
     day_key = store.today_key()
     seed = f"{day_key}-{prof['sign']}-{prof.get('absolute_degree', 0)}"
     h = int(hashlib.sha256(seed.encode()).hexdigest(), 16)
@@ -287,7 +287,7 @@ async def _run_asc_day(message: Message) -> None:
     agate = feature_allowed("ai", is_premium=prem, free_ai_left=left)
 
     header = (
-        f"🌅 **День по восходящему · {prof.get('emoji', '')} {prof['sign']}**\n"
+        f"🌅 **День по восходящему знаку · {prof.get('emoji', '')} {prof['sign']}**\n"
         f"_{prof.get('degree_in_sign', '')}° · {prof.get('place', '')}_\n\n"
         f"Карта: {card.emoji} **{card.number}. {card.name}**\n_{card.keywords}_\n{card.general}\n"
     )

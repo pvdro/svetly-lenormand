@@ -1,4 +1,4 @@
-/* Светлый Ленорман — Mini App (облако + локальный режим) */
+/* Астомания — Mini App (облако + локальный режим) */
 (function () {
   "use strict";
 
@@ -230,11 +230,11 @@
         if (chip) chip.classList.remove("hidden");
         const s = $("#profile-chip-sign");
         const m = $("#profile-chip-meta");
-        if (s) s.textContent = `${local.emoji || "✦"} Восходящий ${local.sign}`;
+        if (s) s.textContent = `${local.emoji || "✦"} Восходящий знак: ${local.sign}`;
         if (m) m.textContent = local.place || "";
         const sub = $("#asc-hero-sub");
         const cta = $("#asc-hero-cta");
-        if (sub) sub.textContent = `Восходящий ${local.sign} — ваш день`;
+        if (sub) sub.textContent = `Восходящий знак ${local.sign} — ваш личный день`;
         if (cta) cta.textContent = "Открыть день ↗";
       }
 
@@ -261,7 +261,7 @@
           if (chip) chip.classList.remove("hidden");
           const s = $("#profile-chip-sign");
           const m = $("#profile-chip-meta");
-          if (s) s.textContent = `${me.profile.emoji || "✦"} Восходящий ${me.profile.sign}`;
+          if (s) s.textContent = `${me.profile.emoji || "✦"} Восходящий знак: ${me.profile.sign}`;
           if (m) m.textContent = me.profile.place || "";
         }
       } catch (_) {
@@ -561,7 +561,7 @@
         .filter(Boolean)
         .join("\n\n");
       showResult({
-        title: `День по восходящему · ${p.sign}`,
+        title: `День по восходящему знаку · ${p.sign}`,
         emoji: "🌅",
         cards: [card],
         positions: ["Карта дня"],
@@ -610,7 +610,7 @@
       } else {
         // без сервера: просим выбрать знак вручную (точность ниже)
         err.textContent =
-          "Сервер расчёта недоступен из сети. Выберите восходящий знак вручную в следующем сообщении — или введите знак в поле «место», например: знак Лев";
+          "Сервер расчёта недоступен. Введите в поле «место» так: знак Лев — или откройте позже, когда сеть позволит.";
         err.classList.remove("hidden");
         const place = payload.place || "";
         const m = place.match(/знак\s+(\S+)/i) || place.match(/^(Овен|Телец|Близнецы|Рак|Лев|Дева|Весы|Скорпион|Стрелец|Козерог|Водолей|Рыбы)$/i);
@@ -633,7 +633,7 @@
       err.classList.remove("hidden");
     } finally {
       $("#btn-calc-asc").disabled = false;
-      $("#calc-label").textContent = "Рассчитать восходящий";
+      $("#calc-label").textContent = "Рассчитать восходящий знак";
     }
   });
 
@@ -771,7 +771,7 @@
     ctx.fillRect(0, 0, w, h);
     ctx.fillStyle = "#3a2f36";
     ctx.font = "600 48px Georgia, serif";
-    ctx.fillText("Светлый Ленорман", 80, 120);
+    ctx.fillText("Астомания", 80, 120);
     ctx.font = "28px sans-serif";
     ctx.fillStyle = "#9a8790";
     ctx.fillText(r.title || "Расклад", 80, 180);
@@ -796,7 +796,7 @@
       const file = new File([blob], "lenormand.png", { type: "image/png" });
       if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
         try {
-          await navigator.share({ files: [file], title: "Светлый Ленорман" });
+          await navigator.share({ files: [file], title: "Астомания" });
           return;
         } catch (_) {}
       }
