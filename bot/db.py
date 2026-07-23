@@ -128,21 +128,64 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_support_admin_msg ON support_messages(admin_chat_id, admin_message_id);
             """
         )
+        # миграции мягко
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(users)").fetchall()}
+        if "lang" not in cols:
+            conn.execute("ALTER TABLE users ADD COLUMN lang TEXT")
 
 
-def upsert_user(user_id: int, username: str | None = None, first_name: str | None = None) -> None:
+def upsert_user(
+    user_id: int,
+    username: str | None = None,
+    first_name: str | None = None,
+    lang: str | None = None,
+) -> None:
+    now = time.time()
+    with db() as conn:
+        row = conn.execute("SELECT user_id, lang FROM users WHERE user_id=?", (user_id,)).fetchone()
+        if row:
+            if lang:
+                conn.execute(
+                    "UPDATE users SET username=COALESCE(?,username), first_name=COALESCE(?,first_name), "
+                    "lang=?, updated_at=? WHERE user_id=?",
+                    (username, first_name, lang, now, user_id),
+                )
+            else:
+                conn.execute(
+                    "UPDATE users SET username=COALESCE(?,username), first_name=COALESCE(?,first_name), updated_at=? WHERE user_id=?",
+                    (username, first_name, now, user_id),
+                )
+        else:
+            conn.execute(
+                "INSERT INTO users(user_id, username, first_name, lang, created_at, updated_at) VALUES (?,?,?,?,?,?)",
+                (user_id, username, first_name, lang, now, now),
+            )
+
+
+def get_user_lang(user_id: int) -> str | None:
+    with db() as conn:
+        row = conn.execute("SELECT lang FROM users WHERE user_id=?", (user_id,)).fetchone()
+    if not row:
+        return None
+    return (row["lang"] or None) if "lang" in row.keys() else None
+
+
+def set_user_lang(user_id: int, lang: str) -> None:
+    lang = (lang or "ru").lower()[:5]
+    if lang not in ("ru", "en"):
+        lang = "ru"
     now = time.time()
     with db() as conn:
         row = conn.execute("SELECT user_id FROM users WHERE user_id=?", (user_id,)).fetchone()
         if row:
             conn.execute(
-                "UPDATE users SET username=COALESCE(?,username), first_name=COALESCE(?,first_name), updated_at=? WHERE user_id=?",
-                (username, first_name, now, user_id),
+                "UPDATE users SET lang=?, updated_at=? WHERE user_id=?",
+                (lang, now, user_id),
             )
         else:
             conn.execute(
-                "INSERT INTO users(user_id, username, first_name, created_at, updated_at) VALUES (?,?,?,?,?)",
-                (user_id, username, first_name, now, now),
+                "INSERT INTO users(user_id, lang, created_at, updated_at) VALUES (?,?,?,?)",
+                (user_id, lang, now, now),
             )
 
 

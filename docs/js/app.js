@@ -12,6 +12,64 @@
   const CFG = window.APP_CONFIG || {};
   const API_BASE = (CFG.API_BASE || "").replace(/\/$/, "");
   const API_TIMEOUT = CFG.API_TIMEOUT_MS || 8000;
+  const I18N = window.ASTRO_I18N || { ru: {}, en: {} };
+  const LS_LANG = "svetly_lang_v1";
+
+  let uiLang = "ru";
+
+  function detectLang() {
+    try {
+      const q = new URLSearchParams(location.search).get("lang");
+      if (q && (q === "ru" || q === "en")) return q;
+    } catch (_) {}
+    try {
+      const ls = localStorage.getItem(LS_LANG);
+      if (ls === "ru" || ls === "en") return ls;
+    } catch (_) {}
+    const tgLang = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initDataUnsafe
+      ? (window.Telegram.WebApp.initDataUnsafe.user || {}).language_code
+      : null;
+    if (tgLang && String(tgLang).toLowerCase().startsWith("en")) return "en";
+    if (tgLang && String(tgLang).toLowerCase().startsWith("ru")) return "ru";
+    return "ru";
+  }
+
+  function tr(key) {
+    const pack = I18N[uiLang] || I18N.ru || {};
+    return pack[key] || (I18N.ru && I18N.ru[key]) || key;
+  }
+
+  function applyI18n() {
+    document.querySelectorAll("[data-i18n]").forEach((el) => {
+      const k = el.getAttribute("data-i18n");
+      if (k) el.textContent = tr(k);
+    });
+    document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
+      const k = el.getAttribute("data-i18n-placeholder");
+      if (k) el.setAttribute("placeholder", tr(k));
+    });
+    document.querySelectorAll("[data-set-lang]").forEach((btn) => {
+      btn.classList.toggle("active", btn.getAttribute("data-set-lang") === uiLang);
+    });
+    document.documentElement.lang = uiLang;
+  }
+
+  async function setLang(lang, { persist = true } = {}) {
+    uiLang = lang === "en" ? "en" : "ru";
+    try {
+      localStorage.setItem(LS_LANG, uiLang);
+    } catch (_) {}
+    applyI18n();
+    renderSpreads();
+    if (persist && (await probeApi())) {
+      try {
+        await api("/api/lang", {
+          method: "POST",
+          body: JSON.stringify({ initData: initData(), lang: uiLang }),
+        });
+      } catch (_) {}
+    }
+  }
 
   const tg = window.Telegram && window.Telegram.WebApp;
   if (tg) {
@@ -241,7 +299,7 @@
       setStatus("Проверяю связь…", "·");
 
       if (!(await probeApi())) {
-        setStatus("Режим: в приложении", "сервер недоступен — расклады работают локально");
+        setStatus(tr("local_mode"), tr("status_local"));
         me = { premium: { active: false }, free_ai_used: 0, free_ai_limit: 3, profile: local, is_owner: false };
         toggleOwnerUi(false);
         return;
@@ -249,10 +307,23 @@
 
       try {
         me = await api("/api/me");
+        if (me.lang && (me.lang === "ru" || me.lang === "en") && me.lang !== uiLang) {
+          await setLang(me.lang, { persist: false });
+        }
         const prem = me.premium && me.premium.active;
         setStatus(
-          prem ? "Прогноз: без ограничения ⭐" : `Прогнозов сегодня: ${me.free_ai_used ?? 0}/${me.free_ai_limit ?? 3}`,
-          prem ? `Полный доступ до ${String(me.premium.until).slice(0, 10)}` : "Бесплатно"
+          prem
+            ? uiLang === "en"
+              ? "Reading: unlimited ⭐"
+              : "Прогноз: без ограничения ⭐"
+            : uiLang === "en"
+              ? `Readings today: ${me.free_ai_used ?? 0}/${me.free_ai_limit ?? 3}`
+              : `Прогнозов сегодня: ${me.free_ai_used ?? 0}/${me.free_ai_limit ?? 3}`,
+          prem
+            ? uiLang === "en"
+              ? `Full access until ${String(me.premium.until).slice(0, 10)}`
+              : `Полный доступ до ${String(me.premium.until).slice(0, 10)}`
+            : tr("free")
         );
         toggleOwnerUi(!!me.is_owner);
         if (me.profile && me.profile.sign) {
@@ -266,11 +337,11 @@
         }
       } catch (_) {
         me = { premium: { active: false }, free_ai_used: 0, free_ai_limit: 3, profile: local, is_owner: false };
-        setStatus("Режим: в приложении", "нужен вход из Телеграма для сервера");
+        setStatus(tr("local_mode"), tr("status_need_tg"));
         toggleOwnerUi(false);
       }
     } catch (e) {
-      setStatus("Режим: в приложении", "ошибка статуса");
+      setStatus(tr("local_mode"), "·");
       console.warn("refreshMe", e);
     }
   }
@@ -285,8 +356,16 @@
     grid.innerHTML = "";
     const all = (data.spreads || []).filter((s) => !["day", "asc_day"].includes(s.id));
     const groups = [
-      { key: "lenormand", title: "Ленорман", items: all.filter((s) => (s.system || "lenormand") !== "tarot") },
-      { key: "tarot", title: "Таро Райдера–Уэйта", items: all.filter((s) => s.system === "tarot") },
+      {
+        key: "lenormand",
+        title: tr("group_lenormand"),
+        items: all.filter((s) => (s.system || "lenormand") !== "tarot"),
+      },
+      {
+        key: "tarot",
+        title: tr("group_tarot"),
+        items: all.filter((s) => s.system === "tarot"),
+      },
     ];
     groups.forEach((g) => {
       if (!g.items.length) return;
@@ -299,10 +378,13 @@
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "spread-tile";
+        const title = uiLang === "en" && s.title_en ? s.title_en : s.title;
+        const blurb = uiLang === "en" && s.blurb_en ? s.blurb_en : s.blurb;
+        const cardsWord = uiLang === "en" ? "cards" : "карт";
         btn.innerHTML = `
           <span class="emoji">${s.emoji}</span>
-          <div class="title">${s.title}${prem ? ' <span class="pill-mini">ПОЛНЫЙ</span>' : ""}</div>
-          <div class="meta">${s.n} карт · ${s.blurb}</div>`;
+          <div class="title">${title}${prem ? ` <span class="pill-mini">${tr("full")}</span>` : ""}</div>
+          <div class="meta">${s.n} ${cardsWord} · ${blurb}</div>`;
         btn.addEventListener("click", () => {
           if (s.id === "compat") {
             show("compat");
@@ -331,9 +413,9 @@
     const q = getQuestion();
     setQuestion(q);
     const drawQhint = $("#draw-q");
-    if (drawQhint) drawQhint.textContent = q ? `Вопрос будет учтён в прогнозе` : "Можно задать вопрос выше";
+    if (drawQhint) drawQhint.textContent = q ? tr("q_hint_set") : tr("q_hint_empty");
     const sh = $("#shuffle-label");
-    if (sh) sh.textContent = "Перетасовать и вытянуть";
+    if (sh) sh.textContent = tr("shuffle");
     const btn = $("#btn-shuffle");
     if (btn) btn.disabled = false;
     const pile = $("#deck-pile");
@@ -355,7 +437,7 @@
     const btn = $("#btn-shuffle");
     if (btn) btn.disabled = true;
     const sh = $("#shuffle-label");
-    if (sh) sh.textContent = "Тасую…";
+    if (sh) sh.textContent = tr("shuffle_doing");
     const pile = $("#deck-pile");
     if (pile) pile.classList.add("shuffling");
 
@@ -424,7 +506,7 @@
       alert(e.message || "Ошибка");
     } finally {
       if (btn) btn.disabled = false;
-      if (sh) sh.textContent = "Перетасовать и вытянуть";
+      if (sh) sh.textContent = tr("shuffle");
     }
   }
 
@@ -436,7 +518,7 @@
 
     const rb = $("#result-blurb");
     if (rb) {
-      if (r.question) rb.innerHTML = `<strong>Вопрос:</strong> ${escapeHtml(r.question)}`;
+      if (r.question) rb.innerHTML = `<strong>${tr("question_prefix")}</strong> ${escapeHtml(r.question)}`;
       else rb.textContent = r.blurb || r.day_key || "";
     }
 
@@ -475,10 +557,10 @@
     const aiMeta = $("#ai-meta");
     if (aiMeta) {
       aiMeta.textContent = r.ai
-        ? "живой прогноз"
+        ? tr("live_reading")
         : r.provider === "local"
-          ? "локальный режим"
-          : "краткий режим";
+          ? tr("local_reading")
+          : tr("short_reading");
     }
 
     const jr = $("#journal-rate");
@@ -918,8 +1000,15 @@
     } catch (_) {}
   }
 
+  // language buttons
+  document.querySelectorAll("[data-set-lang]").forEach((btn) => {
+    btn.addEventListener("click", () => setLang(btn.getAttribute("data-set-lang")));
+  });
+
   // boot
-  setStatus("Загрузка…", "·");
+  uiLang = detectLang();
+  applyI18n();
+  setStatus(tr("status_loading"), "·");
   restoreQuestion();
   renderSpreads();
   show("home");

@@ -9,20 +9,24 @@ from datetime import date
 
 from aiogram import F, Router
 from aiogram.filters import BaseFilter, Command, CommandStart
+from pathlib import Path
+
 from aiogram.types import (
     CallbackQuery,
+    FSInputFile,
     LabeledPrice,
     Message,
     PreCheckoutQuery,
 )
 
-
 from bot import db as store
 from bot.admin import admin_ids, format_stats, is_admin, support_url
 from bot.cards import DECK, draw
+from bot.i18n import normalize_lang, system_prompt, t
 from bot.keyboards import (
     after_spread,
     cancel_support_kb,
+    language_inline,
     main_menu,
     open_app_inline,
     premium_inline,
@@ -32,7 +36,13 @@ from bot.llm import build_asc_day_prompt, build_spread_prompt, chat, fallback_sp
 from bot.premium import FREE_AI_READINGS_PER_DAY, PLANS, feature_allowed, plan_by_payload
 from bot.spreads import SPREADS
 from bot.tarot import TAROT_SPREADS, draw_tarot, tarot_to_dict
-from bot.texts import ASK_BIRTH, HELP, HOW_MONEY, NO_APP, PREMIUM_INFO, SUPPORT, WELCOME
+
+ROOT = Path(__file__).resolve().parent.parent
+WELCOME_IMAGE = ROOT / "assets" / "welcome.jpg"
+if not WELCOME_IMAGE.exists():
+    WELCOME_IMAGE = ROOT / "miniapp" / "assets" / "hero.jpg"
+if not WELCOME_IMAGE.exists():
+    WELCOME_IMAGE = ROOT / "assets" / "bot_avatar.jpg"
 
 
 class IsAdminFilter(BaseFilter):
@@ -65,6 +75,44 @@ BUTTON_TO_SPREAD = {
     "🃏 Таро: любовь": "t_love",
     "🃏 Таро: путь": "t_path",
 }
+
+
+def _lang(user_id: int | None, telegram_code: str | None = None) -> str:
+    if user_id:
+        saved = store.get_user_lang(user_id)
+        if saved:
+            return normalize_lang(saved)
+    return normalize_lang(telegram_code)
+
+
+def _name(user) -> str:
+    if not user:
+        return t("fallback_name", "ru")
+    return (user.first_name or user.username or t("fallback_name", "ru")).strip()
+
+
+async def _send_welcome(message: Message, lang: str) -> None:
+    """Красивое фото + приветствие с именем + кнопка приложения."""
+    name = _name(message.from_user)
+    caption = t("welcome", lang, name=name)
+    kb = open_app_inline(lang)
+    try:
+        if WELCOME_IMAGE.exists():
+            photo = FSInputFile(str(WELCOME_IMAGE))
+            # caption limit ~1024
+            short = caption if len(caption) <= 1000 else t("welcome_caption", lang, name=name)
+            await message.answer_photo(
+                photo,
+                caption=short,
+                parse_mode="Markdown",
+                reply_markup=kb or main_menu(),
+            )
+            if short != caption:
+                await message.answer(caption, parse_mode="Markdown", reply_markup=kb or main_menu())
+            return
+    except Exception as e:
+        logger.warning("welcome photo: %s", e)
+    await message.answer(caption, parse_mode="Markdown", reply_markup=kb or main_menu())
 
 
 def _chunk(text: str, limit: int = 3900) -> list[str]:
@@ -185,25 +233,30 @@ async def _run_spread(message: Message, spread_id: str, question: str | None = N
     left = 999 if prem else max(0, FREE_AI_READINGS_PER_DAY - used)
     agate = feature_allowed("ai", is_premium=prem, free_ai_left=left)
 
+    lang = _lang(uid, getattr(message.from_user, "language_code", None) if message.from_user else None)
     ai_text = None
     if agate["ok"]:
-        system = "tarot" if is_tarot else "lenormand"
         prompt = build_spread_prompt(
             spread_title=spread_title,
-            spread_blurb=spread_blurb + (f" Система: Таро Райдера–Уэйта." if is_tarot else " Система: Ленорман."),
+            spread_blurb=spread_blurb + (
+                " System: Rider–Waite Tarot." if is_tarot and lang == "en"
+                else " Система: Таро Райдера–Уэйта." if is_tarot
+                else " System: Lenormand." if lang == "en"
+                else " Система: Ленорман."
+            ),
             cards=cards_d,
             positions=positions,
             question=question,
-            extra="Пиши только по-русски, без англицизмов. Тон светлый и бережный.",
+            extra=t("llm_lang_note", lang),
         )
         try:
-            ai_text, provider, model = chat(prompt)
+            ai_text, provider, model = chat(prompt, system=system_prompt(lang))
             if not prem:
                 store.inc_ai_today(uid)
-            lines.append(f"\n✨ **Живой прогноз**\n{ai_text}")
+            lines.append(f"\n✨ **Живой прогноз**\n{ai_text}" if lang == "ru" else f"\n✨ **Live reading**\n{ai_text}")
         except Exception as e:
             ai_text = fallback_spread_text(cards_d, spread_title)
-            lines.append(f"\n✨ **Прогноз**\n{ai_text}\n\n_(Краткий режим: {e})_")
+            lines.append(f"\n✨ **Прогноз**\n{ai_text}\n\n_({e})_")
     else:
         lines.append(f"\n_{agate['message']}_")
         ai_text = "\n".join(lines)
@@ -216,10 +269,10 @@ async def _run_spread(message: Message, spread_id: str, question: str | None = N
         question,
         cards_d,
         ai_text or text,
-        {"system": "tarot" if is_tarot else "lenormand"},
+        {"system": "tarot" if is_tarot else "lenormand", "lang": lang},
         day_key=store.today_key() if spread_id in ("day", "t_day") else store.today_key(),
     )
-    await _send_long(message, text, parse_mode="Markdown", reply_markup=after_spread(spread_id))
+    await _send_long(message, text, parse_mode="Markdown", reply_markup=after_spread(spread_id, lang))
 
 
 def _parse_birth(text: str) -> tuple[str, str, str] | None:
@@ -254,20 +307,26 @@ async def _run_asc_day(message: Message) -> None:
     prof = store.get_default_profile(uid)
     if not prof or not prof.get("sign"):
         _waiting_birth.add(uid)
-        await message.answer(ASK_BIRTH, parse_mode="Markdown", reply_markup=main_menu())
+        lang = _lang(uid, getattr(message.from_user, "language_code", None) if message.from_user else None)
+        await message.answer(t("ask_birth", lang), parse_mode="Markdown", reply_markup=main_menu())
         return
 
+    lang = _lang(uid, getattr(message.from_user, "language_code", None) if message.from_user else None)
     existing = store.get_day_reading(uid, "asc_day")
     if existing and existing.get("ai_text"):
         await _send_long(
             message,
-            f"🌅 **День по восходящему знаку** (уже на сегодня)\n\n{existing['ai_text']}",
+            f"🌅 **День по восходящему знаку** (уже на сегодня)\n\n{existing['ai_text']}"
+            if lang == "ru"
+            else f"🌅 **Day by rising sign** (already today)\n\n{existing['ai_text']}",
             parse_mode="Markdown",
             reply_markup=main_menu(),
         )
         return
 
-    await message.answer("🕊️ Считаю день по восходящему знаку…")
+    await message.answer(
+        "🕊️ Считаю день по восходящему знаку…" if lang == "ru" else "🕊️ Calculating your day by rising sign…"
+    )
     day_key = store.today_key()
     seed = f"{day_key}-{prof['sign']}-{prof.get('absolute_degree', 0)}"
     h = int(hashlib.sha256(seed.encode()).hexdigest(), 16)
@@ -293,70 +352,147 @@ async def _run_asc_day(message: Message) -> None:
     )
     if agate["ok"]:
         try:
-            ai_text, _, _ = chat(prompt)
+            ai_text, _, _ = chat(prompt, system=system_prompt(lang))
             if not prem:
                 store.inc_ai_today(uid)
-            text = header + f"\n✨ **Живой прогноз**\n{ai_text}"
+            text = header + (f"\n✨ **Живой прогноз**\n{ai_text}" if lang == "ru" else f"\n✨ **Live reading**\n{ai_text}")
         except Exception as e:
-            text = header + f"\n✨ **Прогноз**\n{fallback_spread_text(cards_d, 'День')}\n\n_({e})_"
+            text = header + f"\n✨\n{fallback_spread_text(cards_d, 'Day')}\n\n_({e})_"
     else:
         text = header + f"\n_{agate['message']}_"
 
-    store.save_reading(uid, "asc_day", f"День · {prof['sign']}", None, cards_d, text, {"profile": prof["sign"]})
+    store.save_reading(uid, "asc_day", f"День · {prof['sign']}", None, cards_d, text, {"profile": prof["sign"], "lang": lang})
     await _send_long(message, text, parse_mode="Markdown", reply_markup=main_menu())
 
 
 @router.message(CommandStart())
 async def cmd_start(message: Message) -> None:
-    if message.from_user:
-        store.upsert_user(message.from_user.id, message.from_user.username, message.from_user.first_name)
-    # убираем старую нижнюю клавиатуру раскладов
-    await message.answer(WELCOME, parse_mode="Markdown", reply_markup=main_menu())
-    app_kb = open_app_inline()
-    if app_kb:
-        await message.answer("👇", reply_markup=app_kb)
-    else:
-        await message.answer(NO_APP)
+    user = message.from_user
+    tg_lang = getattr(user, "language_code", None) if user else None
+    if user:
+        store.upsert_user(user.id, user.username, user.first_name)
+
+    saved = store.get_user_lang(user.id) if user else None
     args = (message.text or "").split(maxsplit=1)
-    if len(args) > 1:
-        payload = args[1].strip().lower()
-        if payload in ("premium", "pay", "stars", "dostup", "доступ"):
-            await cmd_premium(message)
-        elif payload in ("podderzhka", "support", "help", "помощь", "поддержка"):
-            await cmd_support(message)
+    payload = args[1].strip().lower() if len(args) > 1 else ""
+
+    # deep-link language
+    if payload in ("en", "lang_en", "english"):
+        if user:
+            store.set_user_lang(user.id, "en")
+        lang = "en"
+    elif payload in ("ru", "lang_ru", "russian", "рус"):
+        if user:
+            store.set_user_lang(user.id, "ru")
+        lang = "ru"
+    elif not saved:
+        # первый заход — предложить язык (учитываем Telegram language_code)
+        guess = normalize_lang(tg_lang)
+        await message.answer(
+            t("choose_lang", guess),
+            reply_markup=language_inline(),
+        )
+        # всё равно покажем welcome на угаданном языке + фото
+        if user and not saved:
+            store.set_user_lang(user.id, guess)
+        lang = guess
+    else:
+        lang = normalize_lang(saved)
+
+    # сброс старой нижней клавиатуры + welcome с фото
+    await message.answer("\u200b", reply_markup=main_menu())
+    await _send_welcome(message, lang)
+
+    if payload in ("premium", "pay", "stars", "dostup", "доступ"):
+        await cmd_premium(message)
+    elif payload in ("podderzhka", "support", "help", "помощь", "поддержка"):
+        await cmd_support(message)
+    elif payload in ("lang", "language", "язык"):
+        await cmd_lang(message)
+
+
+@router.message(Command("lang", "language", "язык", "language_code"))
+async def cmd_lang(message: Message) -> None:
+    lang = _lang(
+        message.from_user.id if message.from_user else None,
+        getattr(message.from_user, "language_code", None) if message.from_user else None,
+    )
+    await message.answer(t("choose_lang", lang), reply_markup=language_inline())
+
+
+@router.callback_query(F.data.startswith("lang:"))
+async def cb_lang(query: CallbackQuery) -> None:
+    code = (query.data or "lang:ru").split(":", 1)[1]
+    lang = normalize_lang(code)
+    if query.from_user:
+        store.upsert_user(query.from_user.id, query.from_user.username, query.from_user.first_name)
+        store.set_user_lang(query.from_user.id, lang)
+    await query.answer(t("lang_set", lang))
+    if query.message:
+        try:
+            await query.message.edit_reply_markup(reply_markup=None)
+        except Exception:
+            pass
+        # fake message context for welcome
+        class _M:
+            pass
+
+        # use real message
+        await query.message.answer(t("lang_set", lang), reply_markup=main_menu())
+        await _send_welcome(query.message, lang)
 
 
 @router.message(Command("app", "open", "menu", "приложение"))
 async def cmd_app(message: Message) -> None:
-    kb = open_app_inline()
+    lang = _lang(
+        message.from_user.id if message.from_user else None,
+        getattr(message.from_user, "language_code", None) if message.from_user else None,
+    )
+    kb = open_app_inline(lang)
     if kb:
-        await message.answer("Откройте приложение 👇", reply_markup=kb)
+        await message.answer(t("open_app_msg", lang), reply_markup=kb)
     else:
-        await message.answer(NO_APP, reply_markup=main_menu())
+        await message.answer(t("no_app", lang), reply_markup=main_menu())
 
 
 @router.message(Command("help", "помощь"))
 async def cmd_help(message: Message) -> None:
-    await message.answer(HELP, parse_mode="Markdown", reply_markup=open_app_inline() or main_menu())
+    lang = _lang(
+        message.from_user.id if message.from_user else None,
+        getattr(message.from_user, "language_code", None) if message.from_user else None,
+    )
+    await message.answer(
+        t("help", lang),
+        parse_mode="Markdown",
+        reply_markup=open_app_inline(lang) or main_menu(),
+    )
 
 
 @router.message(Command("premium", "stars", "pay", "dostup", "доступ"))
 async def cmd_premium(message: Message) -> None:
+    lang = "ru"
     if message.from_user:
         store.upsert_user(message.from_user.id, message.from_user.username, message.from_user.first_name)
+        lang = _lang(message.from_user.id, getattr(message.from_user, "language_code", None))
         info = store.premium_info(message.from_user.id)
         status = (
-            f"\n\n✅ У вас **полный доступ** до `{info['until'][:10]}`"
+            t("premium_active", lang, until=info["until"][:10])
             if info["active"]
-            else "\n\nСейчас: бесплатный режим."
+            else t("premium_free", lang)
         )
     else:
         status = ""
-    await message.answer(PREMIUM_INFO + status, parse_mode="Markdown", reply_markup=premium_inline())
+    await message.answer(
+        t("premium", lang) + status,
+        parse_mode="Markdown",
+        reply_markup=premium_inline(lang),
+    )
 
 
 @router.message(Command("money", "withdraw", "вывод"))
 async def cmd_money(message: Message) -> None:
+    from bot.texts import HOW_MONEY
+
     await message.answer(HOW_MONEY, parse_mode="Markdown")
 
 
@@ -364,31 +500,33 @@ async def cmd_money(message: Message) -> None:
 async def cmd_status(message: Message) -> None:
     if not message.from_user:
         return
+    lang = _lang(message.from_user.id, getattr(message.from_user, "language_code", None))
     info = store.premium_info(message.from_user.id)
     used = store.count_ai_today(message.from_user.id)
     if info["active"]:
         await message.answer(
-            f"✅ Полный доступ до {info['until'][:10]}",
-            reply_markup=open_app_inline(),
+            t("status_prem", lang, until=info["until"][:10]),
+            reply_markup=open_app_inline(lang),
         )
     else:
         await message.answer(
-            f"Бесплатный режим.\nЖивых прогнозов сегодня: {used}/3\n/dostup — тарифы ⭐",
-            reply_markup=open_app_inline(),
+            t("status_free", lang, used=used),
+            reply_markup=open_app_inline(lang),
         )
 
 
-@router.message(F.text == "✖️ Отмена")
+@router.message(F.text.in_({"✖️ Отмена", "✖️ Cancel"}))
 async def btn_cancel(message: Message) -> None:
     if not message.from_user:
         return
     uid = message.from_user.id
+    lang = _lang(uid, getattr(message.from_user, "language_code", None))
     _waiting_birth.discard(uid)
     _waiting_support.discard(uid)
-    await message.answer("Отменено.", reply_markup=main_menu())
-    kb = open_app_inline()
+    await message.answer(t("cancelled", lang), reply_markup=main_menu())
+    kb = open_app_inline(lang)
     if kb:
-        await message.answer("Приложение 👇", reply_markup=kb)
+        await message.answer(t("app_below", lang), reply_markup=kb)
 
 
 @router.message(Command("myid", "мойid", "id", "ктоя"))
@@ -443,39 +581,45 @@ async def cmd_stats(message: Message) -> None:
 
 @router.message(Command("podderzhka", "support", "helpme", "поддержка"))
 async def cmd_support(message: Message) -> None:
+    lang = "ru"
     if message.from_user:
         store.upsert_user(message.from_user.id, message.from_user.username, message.from_user.first_name)
-    await message.answer(SUPPORT, parse_mode="Markdown", reply_markup=support_inline())
-    # если админы настроены — принимаем текст здесь; иначе только ссылка на автора
+        lang = _lang(message.from_user.id, getattr(message.from_user, "language_code", None))
+    await message.answer(t("support", lang), parse_mode="Markdown", reply_markup=support_inline(lang))
     if message.from_user and admin_ids():
         _waiting_support.add(message.from_user.id)
         await message.answer(
-            "Напишите сообщение — я перешлю автору.",
-            reply_markup=cancel_support_kb(),
+            t("support_write", lang),
+            reply_markup=cancel_support_kb(lang),
         )
     elif not support_url():
-        await message.answer(
-            "Поддержка пока не настроена (нет SUPPORT_USERNAME / ADMIN_IDS).",
-            reply_markup=main_menu(),
-        )
+        await message.answer(t("support_fail", lang), reply_markup=main_menu())
 
 
 @router.callback_query(F.data == "support:menu")
 async def cb_support_menu(query: CallbackQuery) -> None:
     await query.answer()
+    lang = _lang(
+        query.from_user.id if query.from_user else None,
+        getattr(query.from_user, "language_code", None) if query.from_user else None,
+    )
     if query.message:
-        await query.message.answer(SUPPORT, parse_mode="Markdown", reply_markup=support_inline())
+        await query.message.answer(t("support", lang), parse_mode="Markdown", reply_markup=support_inline(lang))
 
 
 @router.callback_query(F.data == "support:write")
 async def cb_support_write(query: CallbackQuery) -> None:
     await query.answer()
+    lang = _lang(
+        query.from_user.id if query.from_user else None,
+        getattr(query.from_user, "language_code", None) if query.from_user else None,
+    )
     if query.from_user:
         _waiting_support.add(query.from_user.id)
     if query.message:
         await query.message.answer(
-            "Напишите сообщение для автора 👇\n(или «✖️ Отмена»)",
-            reply_markup=cancel_support_kb(),
+            t("support_write_cb", lang),
+            reply_markup=cancel_support_kb(lang),
         )
 
 
@@ -512,21 +656,28 @@ async def _forward_support_to_admins(message: Message, text: str) -> bool:
 @router.message(F.text.in_(set(BUTTON_TO_SPREAD)))
 async def btn_spread_legacy(message: Message) -> None:
     """Старые кнопки чата: направляем в приложение."""
-    kb = open_app_inline()
+    lang = _lang(
+        message.from_user.id if message.from_user else None,
+        getattr(message.from_user, "language_code", None) if message.from_user else None,
+    )
+    kb = open_app_inline(lang)
     await message.answer(
-        "Расклады теперь **в приложении** ✨\nНажмите кнопку ниже.",
-        parse_mode="Markdown",
+        t("open_app_msg", lang),
         reply_markup=kb or main_menu(),
     )
 
 
 @router.callback_query(F.data.startswith("spread:"))
 async def cb_spread(query: CallbackQuery) -> None:
-    await query.answer("Откройте приложение")
+    lang = _lang(
+        query.from_user.id if query.from_user else None,
+        getattr(query.from_user, "language_code", None) if query.from_user else None,
+    )
+    await query.answer(t("open_app", lang))
     if query.message:
-        kb = open_app_inline()
+        kb = open_app_inline(lang)
         if kb:
-            await query.message.answer("Расклады в приложении 👇", reply_markup=kb)
+            await query.message.answer(t("open_app_msg", lang), reply_markup=kb)
 
 
 @router.callback_query(F.data.startswith("buy:"))
@@ -606,36 +757,28 @@ async def text_router(message: Message) -> None:
         return
     uid = message.from_user.id
     text = message.text.strip()
+    lang = _lang(uid, getattr(message.from_user, "language_code", None))
 
     # support message to owner
     if uid in _waiting_support:
         _waiting_support.discard(uid)
         if text in BUTTON_TO_SPREAD or text in (
-            "☀️ Карта дня",
-            "🌅 День по восходящему",
-            "⭐ Полный доступ",
-            "ℹ️ Помощь",
-            "💬 Поддержка",
-            "✖️ Отмена",
-            "✨ Красивое приложение",
+            t("btn_cancel", "ru"),
+            t("btn_cancel", "en"),
+            t("btn_full", "ru"),
+            t("btn_full", "en"),
         ):
-            await message.answer("Отменено.", reply_markup=main_menu())
+            await message.answer(t("cancelled", lang), reply_markup=main_menu())
             return
         ok = await _forward_support_to_admins(message, text)
         if ok:
-            await message.answer(
-                "✅ Сообщение отправлено автору. Ответ придёт сюда в бот.",
-                reply_markup=main_menu(),
-            )
+            await message.answer(t("support_sent", lang), reply_markup=main_menu())
         else:
             url = support_url()
-            extra = f"\nИли напишите напрямую: {url}" if url else ""
-            await message.answer(
-                "Пока не удалось переслать (не настроен ADMIN_IDS)." + extra,
-                reply_markup=main_menu(),
-            )
+            extra = f"\n{url}" if url else ""
+            await message.answer(t("support_fail", lang) + extra, reply_markup=main_menu())
             if url:
-                await message.answer("Кнопка связи:", reply_markup=support_inline())
+                await message.answer(t("btn_support", lang), reply_markup=support_inline(lang))
         return
 
     # waiting birth data
@@ -669,19 +812,9 @@ async def text_router(message: Message) -> None:
             await message.answer(f"Не удалось рассчитать: {e}", reply_markup=main_menu())
         return
 
-    # free text → подсказка открыть приложение (кроме режима поддержки/даты)
-    if len(text) > 2 and not text.startswith("/"):
-        kb = open_app_inline()
-        await message.answer(
-            "Расклады — в **приложении** ✨\n"
-            "Команды: /dostup · /podderzhka · /help",
-            parse_mode="Markdown",
-            reply_markup=kb or main_menu(),
-        )
-        return
-
-    kb = open_app_inline()
+    # free text → подсказка открыть приложение
+    kb = open_app_inline(lang)
     await message.answer(
-        "Откройте приложение 👇",
+        t("open_app_msg", lang) + "\n/lang · /help · /premium · /support",
         reply_markup=kb or main_menu(),
     )

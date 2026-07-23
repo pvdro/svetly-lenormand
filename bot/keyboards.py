@@ -1,4 +1,4 @@
-"""Клавиатуры бота — только Mini App, без кнопок раскладов в чате."""
+"""Клавиатуры бота — Mini App + язык."""
 from __future__ import annotations
 
 import os
@@ -13,6 +13,7 @@ from aiogram.types import (
 )
 
 from bot.admin import support_url
+from bot.i18n import t
 from bot.premium import PLANS
 
 
@@ -21,91 +22,130 @@ def miniapp_url() -> str:
 
 
 def main_menu() -> ReplyKeyboardRemove:
-    """Скрываем нижнюю клавиатуру — всё в приложении."""
     return ReplyKeyboardRemove(remove_keyboard=True)
 
 
-def open_app_inline() -> InlineKeyboardMarkup | None:
-    """Единственная кнопка в чате: открыть Mini App. Без раскладов."""
-    url = miniapp_url()
-    if not url:
-        return None
+def language_inline() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(
-                    text="✨ Открыть приложение",
-                    web_app=WebAppInfo(url=url),
-                )
+                InlineKeyboardButton(text=t("lang_ru", "ru"), callback_data="lang:ru"),
+                InlineKeyboardButton(text=t("lang_en", "en"), callback_data="lang:en"),
             ]
         ]
     )
 
 
-def support_inline() -> InlineKeyboardMarkup:
+def open_app_inline(lang: str = "ru") -> InlineKeyboardMarkup | None:
+    url = miniapp_url()
+    rows: list[list[InlineKeyboardButton]] = []
+    if url:
+        # lang query so Mini App can pick language
+        sep = "&" if "?" in url else "?"
+        app_url = f"{url}{sep}lang={lang}" if "lang=" not in url else url
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=t("open_app", lang),
+                    web_app=WebAppInfo(url=app_url),
+                )
+            ]
+        )
+    rows.append(
+        [
+            InlineKeyboardButton(text="🇷🇺", callback_data="lang:ru"),
+            InlineKeyboardButton(text="🇬🇧", callback_data="lang:en"),
+            InlineKeyboardButton(text=t("btn_full", lang), callback_data="buy:premium_30"),
+        ]
+    )
+    if not rows:
+        return None
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def support_inline(lang: str = "ru") -> InlineKeyboardMarkup:
     from bot.admin import admin_ids
 
     rows: list[list[InlineKeyboardButton]] = []
     sup = support_url()
     if sup:
-        rows.append([InlineKeyboardButton(text="💬 Открыть чат с автором", url=sup)])
+        rows.append([InlineKeyboardButton(text=t("btn_support_chat", lang), url=sup)])
     if admin_ids():
         rows.append(
-            [InlineKeyboardButton(text="✉️ Написать здесь в боте", callback_data="support:write")]
+            [InlineKeyboardButton(text=t("btn_support_here", lang), callback_data="support:write")]
         )
     url = miniapp_url()
     if url:
+        sep = "&" if "?" in url else "?"
         rows.append(
-            [InlineKeyboardButton(text="✨ В приложение", web_app=WebAppInfo(url=url))]
+            [
+                InlineKeyboardButton(
+                    text=t("btn_to_app", lang),
+                    web_app=WebAppInfo(url=f"{url}{sep}lang={lang}"),
+                )
+            ]
         )
     if not rows:
         rows.append(
-            [InlineKeyboardButton(text="🤖 Бот", url="https://t.me/AstoManiabot")]
+            [InlineKeyboardButton(text="🤖 Bot", url="https://t.me/AstoManiabot")]
         )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def premium_inline() -> InlineKeyboardMarkup:
+def premium_inline(lang: str = "ru") -> InlineKeyboardMarkup:
     rows = []
     for pid, p in PLANS.items():
         mark = "💎" if p.get("badge") else "⭐"
-        label = f"{mark} {p['title']} — {p['stars']} зв."
+        if lang == "en":
+            titles = {
+                "premium_7": "Full access · 7 days",
+                "premium_30": "Full access · 30 days",
+                "deep_once": "Deep reading (once)",
+            }
+            title = titles.get(pid, p["title"])
+        else:
+            title = p["title"]
+        label = f"{mark} {title} — {p['stars']} ⭐"
         rows.append([InlineKeyboardButton(text=label, callback_data=f"buy:{pid}")])
     url = miniapp_url()
     if url:
+        sep = "&" if "?" in url else "?"
         rows.append(
             [
                 InlineKeyboardButton(
-                    text="✨ Открыть приложение",
-                    web_app=WebAppInfo(url=url),
+                    text=t("open_app", lang),
+                    web_app=WebAppInfo(url=f"{url}{sep}lang={lang}"),
                 )
             ]
         )
     sup = support_url()
     if sup:
-        rows.append([InlineKeyboardButton(text="💬 Поддержка", url=sup)])
+        rows.append([InlineKeyboardButton(text=t("btn_support", lang), url=sup)])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def after_spread(spread_id: str) -> InlineKeyboardMarkup:
-    """После редкого расклада в чате — снова в приложение."""
+def after_spread(spread_id: str, lang: str = "ru") -> InlineKeyboardMarkup:
     url = miniapp_url()
     rows: list[list[InlineKeyboardButton]] = []
     if url:
+        sep = "&" if "?" in url else "?"
         rows.append(
             [
                 InlineKeyboardButton(
-                    text="✨ Открыть приложение",
-                    web_app=WebAppInfo(url=url),
+                    text=t("open_app", lang),
+                    web_app=WebAppInfo(url=f"{url}{sep}lang={lang}"),
                 )
             ]
         )
-    return InlineKeyboardMarkup(inline_keyboard=rows or [[InlineKeyboardButton(text="⭐ Полный доступ", callback_data="buy:premium_30")]])
+    return InlineKeyboardMarkup(
+        inline_keyboard=rows
+        or [[InlineKeyboardButton(text=t("btn_full", lang), callback_data="buy:premium_30")]]
+    )
 
 
-def cancel_support_kb() -> ReplyKeyboardMarkup:
+def cancel_support_kb(lang: str = "ru") -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="✖️ Отмена")]],
+        keyboard=[[KeyboardButton(text=t("btn_cancel", lang))]],
         resize_keyboard=True,
         one_time_keyboard=True,
     )

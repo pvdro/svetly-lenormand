@@ -109,6 +109,9 @@ class Handler(SimpleHTTPRequestHandler):
             return _json(self, 200, {"plans": list(PLANS.values()), "free_ai_per_day": FREE_AI_READINGS_PER_DAY})
         if path == "/api/me":
             return self._me()
+        if path == "/api/lang":
+            # GET current lang
+            return self._lang_get()
         if path == "/api/history":
             return self._history()
         if path == "/api/profiles":
@@ -133,6 +136,7 @@ class Handler(SimpleHTTPRequestHandler):
             "/api/profile/default": self._profile_default,
             "/api/journal": self._journal_add,
             "/api/notify": self._notify,
+            "/api/lang": self._lang_set,
             "/api/reading/day": self._day_reading_get_or_create,
         }
         fn = routes.get(path)
@@ -149,6 +153,7 @@ class Handler(SimpleHTTPRequestHandler):
 
     def _me(self):
         from bot.admin import is_admin
+        from bot.i18n import normalize_lang
 
         user = self._require_user()
         if not user:
@@ -158,6 +163,7 @@ class Handler(SimpleHTTPRequestHandler):
         used = store.count_ai_today(uid)
         left = max(0, FREE_AI_READINGS_PER_DAY - used) if not prem["active"] else 999
         prof = store.get_default_profile(uid)
+        lang = normalize_lang(store.get_user_lang(uid) or "ru")
         _json(
             self,
             200,
@@ -170,8 +176,29 @@ class Handler(SimpleHTTPRequestHandler):
                 "profile": prof,
                 "premium_only": list(PREMIUM_ONLY),
                 "is_owner": is_admin(uid),
+                "lang": lang,
             },
         )
+
+    def _lang_get(self):
+        from bot.i18n import normalize_lang
+
+        user = self._require_user()
+        if not user:
+            return
+        lang = normalize_lang(store.get_user_lang(user["id"]) or "ru")
+        _json(self, 200, {"lang": lang})
+
+    def _lang_set(self):
+        from bot.i18n import normalize_lang
+
+        body = self._read_json()
+        user = self._require_user(body)
+        if not user:
+            return
+        lang = normalize_lang(str(body.get("lang") or "ru"))
+        store.set_user_lang(user["id"], lang)
+        _json(self, 200, {"ok": True, "lang": lang})
 
     def _admin_stats(self):
         from bot.admin import format_stats, is_admin
