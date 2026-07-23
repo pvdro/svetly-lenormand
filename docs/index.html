@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/app.css?v=20260723o" />
+  <link rel="stylesheet" href="css/app.css?v=20260723p" />
 </head>
 <body>
   <div class="bg-orbs" aria-hidden="true">
@@ -31,7 +31,7 @@
             <p class="eyebrow" data-i18n="eyebrow">с теплом · без страшилок</p>
             <h1 data-i18n="brand">Астромания</h1>
             <p class="hero-hello" id="hero-hello"></p>
-            <p class="hero-tagline" data-i18n="tagline">Ленорман · Таро Райдера–Уэйта · день по восходящему знаку</p>
+            <p class="hero-tagline" data-i18n="tagline">Ленорман · Таро · Солнце · Луна · восходящий</p>
           </div>
         </div>
         <div class="lang-bar" id="lang-bar">
@@ -48,8 +48,8 @@
         <div class="hero-glow"></div>
         <div class="hero-content">
           <span class="pill" data-i18n="pill_personal">личное · 1×/день</span>
-          <h2 data-i18n="asc_title">День по восходящему знаку</h2>
-          <p id="asc-hero-sub" data-i18n="asc_sub">Рассчитайте восходящий знак — мягкий ориентир на сегодня</p>
+          <h2 data-i18n="asc_title">Ваша карта рождения</h2>
+          <p id="asc-hero-sub" data-i18n="asc_sub">Солнце, Луна и восходящий — опора на сегодня (не прогноз транзитов)</p>
           <span class="cta" id="asc-hero-cta" data-i18n="asc_cta">Открыть день ↗</span>
         </div>
         <div class="hero-stack" aria-hidden="true">
@@ -82,11 +82,12 @@
         <button type="button" class="quick-tile" data-quick="work"><span class="emoji">🌻</span><span data-i18n="q_work">Дело</span></button>
       </div>
 
-      <h3 class="section-title" data-i18n="section_astro">Ваше небо</h3>
+      <h3 class="section-title" data-i18n="section_astro">Ваша природа сегодня</h3>
+      <p class="muted section-hint" data-i18n="astro_hint">Знаки из карты рождения не меняются каждый день — меняется карта. Солнце = сила, Луна = чувства, восходящий = стиль. Небо недели — отдельно, в транзитах.</p>
       <div class="quick-grid quick-grid-astro" id="astro-day-grid">
-        <button type="button" class="quick-tile" data-astro-day="sun_day"><span class="emoji">☀️</span><span data-i18n="q_sun_day">День по Солнцу</span></button>
-        <button type="button" class="quick-tile" data-astro-day="moon_day"><span class="emoji">🌙</span><span data-i18n="q_moon_day">День по Луне</span></button>
-        <button type="button" class="quick-tile" data-astro-day="asc_day"><span class="emoji">⬆️</span><span data-i18n="q_asc_day">День по ASC</span></button>
+        <button type="button" class="quick-tile" data-astro-day="sun_day"><span class="emoji">☀️</span><span data-i18n="q_sun_day">Сила · Солнце</span></button>
+        <button type="button" class="quick-tile" data-astro-day="moon_day"><span class="emoji">🌙</span><span data-i18n="q_moon_day">Чувства · Луна</span></button>
+        <button type="button" class="quick-tile" data-astro-day="asc_day"><span class="emoji">⬆️</span><span data-i18n="q_asc_day">Стиль · Восходящий</span></button>
       </div>
 
       <button type="button" class="link-row" id="btn-day">
@@ -314,12 +315,13 @@
       <button type="button" class="back-btn" data-go="home">← Назад</button>
       <h2>С теплом</h2>
       <div class="about-card">
-        <p><strong>Астромания</strong> — светлые расклады Ленорман и Таро Райдера–Уэйта, день по восходящему знаку и тёплый прогноз. Без страшилок.</p>
+        <p><strong>Астромания</strong> — светлые расклады Ленорман и Таро Райдера–Уэйта, большая тройка (Солнце, Луна, восходящий) и тёплый прогноз. Без страшилок.</p>
         <ul>
-          <li>Карта дня и день по восходящему знаку — раз в сутки</li>
+          <li>Карта дня и линзы рождения (сила / чувства / стиль) — раз в сутки</li>
+          <li>Знаки не «меняются погодой» — это ваша карта; карта дня — свежий импульс</li>
+          <li>Небо на неделю — общий фон (транзиты), отдельно от личной карты</li>
           <li>Живой прогноз: 3 в сутки · полный доступ без ограничения</li>
-          <li>Оплата звёздами Телеграма ⭐</li>
-          <li>Поддержка — связь с автором в один шаг</li>
+          <li>Оплата звёздами Телеграма ⭐ · поддержка только через бота</li>
         </ul>
         <p class="muted">Не замена врачу, юристу или живому практику 🤍</p>
         <button type="button" class="primary-btn" id="btn-support-about" style="margin-top:16px" data-i18n="btn_support">💬 Поддержка · через бота</button>
@@ -327,9 +329,9 @@
     </section>
   </div>
 
-  <script src="js/config.js?v=20260723o"></script>
-  <script src="js/data.js?v=20260723o"></script>
-  <script src="js/i18n.js?v=20260723o"></script>
-  <script src="js/app.js?v=20260723o"></script>
+  <script src="js/config.js?v=20260723p"></script>
+  <script src="js/data.js?v=20260723p"></script>
+  <script src="js/i18n.js?v=20260723p"></script>
+  <script src="js/app.js?v=20260723p"></script>
 </body>
 </html>

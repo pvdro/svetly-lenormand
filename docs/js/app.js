@@ -828,18 +828,29 @@
       }
       let sign = p.sign;
       let emoji = p.emoji || "✦";
-      let title = uiLang === "en" ? `Day by rising · ${sign}` : `День по восходящему · ${sign}`;
-      let pos = uiLang === "en" ? "Rising day" : "День ASC";
+      let title = uiLang === "en" ? `Style · rising · ${sign}` : `Стиль дня · восходящий · ${sign}`;
+      let pos = uiLang === "en" ? "How you meet the day" : "Как встречаете день";
+      let roleLead = "";
       if (kind === "sun_day") {
         sign = p.sun_sign || p.sign;
         emoji = p.sun_emoji || "☀️";
-        title = uiLang === "en" ? `Day by Sun · ${sign}` : `День по Солнцу · ${sign}`;
-        pos = uiLang === "en" ? "Solar day" : "Солнечный день";
+        title = uiLang === "en" ? `Drive · Sun · ${sign}` : `Сила дня · Солнце · ${sign}`;
+        pos = uiLang === "en" ? "Core & will" : "Ядро и воля";
+        roleLead = uiLang === "en"
+          ? "Your natal Sun — who you are at the core, not the Sun’s transit today."
+          : "Натальное Солнце — кто вы в ядре, не положение Солнца «на небе сегодня».";
       } else if (kind === "moon_day") {
         sign = p.moon_sign || p.sign;
         emoji = p.moon_emoji || "🌙";
-        title = uiLang === "en" ? `Day by Moon · ${sign}` : `День по Луне · ${sign}`;
-        pos = uiLang === "en" ? "Lunar day" : "Лунный день";
+        title = uiLang === "en" ? `Feelings · Moon · ${sign}` : `Чувства · Луна · ${sign}`;
+        pos = uiLang === "en" ? "Needs & care" : "Потребности и забота";
+        roleLead = uiLang === "en"
+          ? "Your natal Moon — emotional needs and care, not today’s lunar transit."
+          : "Натальная Луна — эмоции и забота о себе, не текущий транзит Луны.";
+      } else {
+        roleLead = uiLang === "en"
+          ? "Your rising sign — style of contact, not your core self."
+          : "Восходящий знак — стиль контакта с миром, не «кто вы в глубине».";
       }
       const card = cardForDay(sign + kind);
       const day = (data.ascDay && data.ascDay[sign]) || {};
@@ -849,13 +860,14 @@
         : (uiLang === "en" ? "Rising" : "Восходящий");
       const text = [
         `${emoji} ${label}: ${sign}`,
+        roleLead,
         day.mood || "",
         day.body || "",
         day.focus ? (uiLang === "en" ? `Focus: ${day.focus}` : `Фокус: ${day.focus}`) : "",
         day.care ? (uiLang === "en" ? `Care: ${day.care}` : `Забота: ${day.care}`) : "",
         uiLang === "en"
-          ? `Card: ${card.name} — ${card.general}`
-          : `Карта: ${card.name} — ${card.general}`,
+          ? `Card of the day: ${card.name} — ${card.general}`
+          : `Карта дня: ${card.name} — ${card.general}`,
         uiLang === "en" ? `Advice: ${card.advice}` : `Совет: ${card.advice}`,
       ]
         .filter(Boolean)
@@ -884,7 +896,7 @@
     });
   }
 
-  // Profile: try server ASC, else manual sign pick stored as profile
+  // Profile: server chart (Sun/Moon/rising), else local
   $("#profile-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const err = $("#form-error");

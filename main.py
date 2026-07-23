@@ -50,7 +50,7 @@ async def setup_bot_profile(bot) -> None:
             language_code="ru",
         )
         await bot.set_my_short_description(
-            short_description="Карта дня и Таро Райдера–Уэйта без страшилок. Любовь, «да/нет», ASC ✨",
+            short_description="Карта дня и Таро Райдера–Уэйта без страшилок. Солнце, Луна, восходящий ✨",
             language_code="ru",
         )
         await bot.set_my_description(

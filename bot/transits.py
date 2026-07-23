@@ -76,5 +76,5 @@ def week_transits(tz_name: str = "Europe/Moscow") -> dict[str, Any]:
         "timezone": tz_name,
         "generated_at": now.isoformat(),
         "days": days,
-        "note": "Общий фон неба (не личная карта рождения). Для личного дня смотрите восходящий знак и карту дня.",
+        "note": "Общий фон неба (транзиты, не личная карта). Личные линзы — Солнце, Луна, восходящий + карта дня.",
     }

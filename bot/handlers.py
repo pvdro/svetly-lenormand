@@ -419,7 +419,7 @@ async def _run_asc_day(message: Message) -> None:
     header = (
         f"🌅 **День по восходящему знаку · {prof.get('emoji', '')} {prof['sign']}**\n"
         f"{sun_l}{moon_l}"
-        f"_{prof.get('degree_in_sign', '')}° ASC · {prof.get('place', '')}_\n\n"
+        f"_{prof.get('degree_in_sign', '')}° восходящий · {prof.get('place', '')}_\n\n"
         f"Карта: {card.emoji} **{card.number}. {card.name}**\n_{card.keywords}_\n{card.general}\n"
     )
     if agate["ok"]:

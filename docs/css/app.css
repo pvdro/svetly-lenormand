@@ -118,6 +118,12 @@ h3.section-title {
   color: var(--muted);
   font-weight: 600;
 }
+.section-hint {
+  margin: -4px 0 14px;
+  font-size: 13px;
+  line-height: 1.45;
+  opacity: 0.92;
+}
 .lead, .muted {
   color: var(--ink-soft);
   line-height: 1.55;

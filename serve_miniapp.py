@@ -279,16 +279,16 @@ class Handler(SimpleHTTPRequestHandler):
                     "system": "lenormand",
                 }
             )
-        # virtual asc_day
+        # virtual: стиль дня через восходящий (натал + карта)
         items.insert(
             1,
             {
                 "id": "asc_day",
-                "title": "День по восходящему знаку",
+                "title": "Стиль дня · восходящий",
                 "emoji": "🌅",
                 "n": 1,
-                "positions": ["Карта дня"],
-                "blurb": "Личный день через восходящий знак и карту",
+                "positions": ["Как встречаете день"],
+                "blurb": "Натальный восходящий + карта дня (не транзит)",
                 "focus": "general",
                 "premium": False,
                 "system": "lenormand",
@@ -594,7 +594,7 @@ class Handler(SimpleHTTPRequestHandler):
         )
 
     def _day_reading_get_or_create(self):
-        """Карта дня или ASC-день — 1 раз в сутки."""
+        """Карта дня или день через натал (Солнце/Луна/восходящий) — 1 раз в сутки."""
         from bot.cards import DECK
         from bot.llm import build_asc_day_prompt, build_spread_prompt, chat, fallback_spread_text
         from bot.spreads import SPREADS
@@ -639,21 +639,21 @@ class Handler(SimpleHTTPRequestHandler):
                 sign = prof.get("sun_sign") or prof.get("sign")
                 emoji = prof.get("sun_emoji") or "☀️"
                 degree = float(prof.get("sun_degree") or prof.get("degree_in_sign") or 0)
-                label = f"День по Солнцу · {emoji} {sign}"
+                label = f"Сила дня · Солнце · {emoji} {sign}"
                 base = day_reading_for_sun(sign)
                 seed_key = f"sun-{sign}-{degree}"
             elif kind == "moon_day":
                 sign = prof.get("moon_sign") or prof.get("sign")
                 emoji = prof.get("moon_emoji") or "🌙"
                 degree = float(prof.get("moon_degree") or prof.get("degree_in_sign") or 0)
-                label = f"День по Луне · {emoji} {sign}"
+                label = f"Чувства · Луна · {emoji} {sign}"
                 base = day_reading_for_moon(sign)
                 seed_key = f"moon-{sign}-{degree}"
             else:
                 sign = prof["sign"]
                 emoji = prof.get("emoji") or "✦"
                 degree = float(prof.get("degree_in_sign") or 0)
-                label = f"День по восходящему · {emoji} {sign}"
+                label = f"Стиль дня · восходящий · {emoji} {sign}"
                 base = day_reading_for_asc(sign)
                 seed_key = f"asc-{sign}-{prof.get('absolute_degree', 0)}"
 
@@ -681,14 +681,8 @@ class Handler(SimpleHTTPRequestHandler):
                 place=prof.get("place") or "",
                 card=cards_d[0],
                 base_day=base,
+                kind=kind,
             )
-            # уточним в промпте систему
-            if kind == "sun_day":
-                prompt = "Система: натальное Солнце (ядро личности).\n" + prompt
-            elif kind == "moon_day":
-                prompt = "Система: натальная Луна (чувства и потребности).\n" + prompt
-            else:
-                prompt = "Система: восходящий знак (как встречаете день).\n" + prompt
             meta = {
                 "profile": {
                     "sign": prof.get("sign"),
