@@ -43,17 +43,24 @@ def open_app_inline() -> InlineKeyboardMarkup | None:
 
 
 def support_inline() -> InlineKeyboardMarkup:
+    from bot.admin import admin_ids
+
     rows: list[list[InlineKeyboardButton]] = []
     sup = support_url()
     if sup:
         rows.append([InlineKeyboardButton(text="💬 Открыть чат с автором", url=sup)])
-    rows.append(
-        [InlineKeyboardButton(text="✉️ Написать здесь в боте", callback_data="support:write")]
-    )
+    if admin_ids():
+        rows.append(
+            [InlineKeyboardButton(text="✉️ Написать здесь в боте", callback_data="support:write")]
+        )
     url = miniapp_url()
     if url:
         rows.append(
             [InlineKeyboardButton(text="✨ В приложение", web_app=WebAppInfo(url=url))]
+        )
+    if not rows:
+        rows.append(
+            [InlineKeyboardButton(text="🤖 Бот", url="https://t.me/AstoManiabot")]
         )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 

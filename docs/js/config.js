@@ -5,7 +5,7 @@ window.APP_CONFIG = {
   // таймаут, после которого работаем локально
   API_TIMEOUT_MS: 8000,
   // поддержка: юзернейм без @ (кнопка «написать автору»)
-  SUPPORT_USERNAME: "",
+  SUPPORT_USERNAME: "pdroz",
   // запасной deep-link в бот с командой поддержки
   SUPPORT_BOT: "https://t.me/AstoManiabot?start=podderzhka",
 };

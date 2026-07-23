@@ -391,26 +391,42 @@ async def btn_cancel(message: Message) -> None:
         await message.answer("Приложение 👇", reply_markup=kb)
 
 
-@router.message(Command("myid", "мойid", "id"))
+@router.message(Command("myid", "мойid", "id", "ктоя"))
 async def cmd_myid(message: Message) -> None:
     """Полезно владельцу: узнать свой Telegram id для ADMIN_IDS."""
     if not message.from_user:
         return
     u = message.from_user
-    await message.answer(
-        f"Ваш id: `{u.id}`\n"
-        f"Юзернейм: @{u.username or '—'}\n\n"
-        "_Для статистики владельца: добавьте этот id в переменную `ADMIN_IDS` на сервере._",
-        parse_mode="Markdown",
-    )
+    admin_ok = is_admin(u.id)
+    admins_set = bool(admin_ids())
+    lines = [
+        f"Ваш id: `{u.id}`",
+        f"Юзернейм: @{u.username or '—'}",
+        f"Имя: {u.first_name or '—'}",
+        "",
+        f"Доступ владельца: **{'да ✅' if admin_ok else 'нет ❌'}**",
+        f"ADMIN_IDS на сервере: **{'задан' if admins_set else 'не задан'}**",
+    ]
+    if admin_ok:
+        lines.append("\nКоманды: /stats · /dostup · /podderzhka")
+    else:
+        lines.append(
+            "\n_Чтобы открыть статистику: добавьте этот id в `ADMIN_IDS` на Railway и перезапустите._"
+        )
+    await message.answer("\n".join(lines), parse_mode="Markdown")
 
 
 @router.message(Command("stats", "stat", "статистика", "admin"))
 async def cmd_stats(message: Message) -> None:
-    if not message.from_user or not is_admin(message.from_user.id):
+    if not message.from_user:
+        return
+    if not is_admin(message.from_user.id):
         await message.answer(
-            "Статистика доступна только владельцу.\n"
-            "Чтобы настроить: /myid → добавьте id в ADMIN_IDS.",
+            "📊 Статистика только для владельца.\n\n"
+            f"Ваш id: `{message.from_user.id}`\n"
+            "Напишите /myid — там статус доступа.\n"
+            "Нужно, чтобы этот id был в `ADMIN_IDS` на сервере.",
+            parse_mode="Markdown",
         )
         return
     stats = store.get_usage_stats()
@@ -431,11 +447,17 @@ async def cmd_support(message: Message) -> None:
     if message.from_user:
         store.upsert_user(message.from_user.id, message.from_user.username, message.from_user.first_name)
     await message.answer(SUPPORT, parse_mode="Markdown", reply_markup=support_inline())
-    if message.from_user:
+    # если админы настроены — принимаем текст здесь; иначе только ссылка на автора
+    if message.from_user and admin_ids():
         _waiting_support.add(message.from_user.id)
         await message.answer(
             "Напишите сообщение — я перешлю автору.",
             reply_markup=cancel_support_kb(),
+        )
+    elif not support_url():
+        await message.answer(
+            "Поддержка пока не настроена (нет SUPPORT_USERNAME / ADMIN_IDS).",
+            reply_markup=main_menu(),
         )
 
 
