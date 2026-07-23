@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#FFF8F2" />
+  <title>Светлый Ленорман</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+  <div class="bg-orbs" aria-hidden="true">
+    <span class="orb orb-a"></span>
+    <span class="orb orb-b"></span>
+    <span class="orb orb-c"></span>
+  </div>
+
+  <div id="app">
+    <!-- HOME -->
+    <section id="view-home" class="view active">
+      <header class="top">
+        <div class="hero-banner">
+          <img src="assets/hero.jpg" alt="" class="hero-img" width="1280" height="720" />
+          <div class="hero-banner-fade"></div>
+          <div class="hero-banner-text">
+            <p class="eyebrow">бесплатно · с теплом</p>
+            <h1>Светлый Ленорман</h1>
+          </div>
+        </div>
+        <div class="status-bar" id="status-bar">
+          <span id="status-ai">ИИ: …</span>
+          <span id="status-prem">·</span>
+        </div>
+      </header>
+
+      <button type="button" class="hero-card" id="btn-asc-day">
+        <div class="hero-glow"></div>
+        <div class="hero-content">
+          <span class="pill">личное · 1×/день</span>
+          <h2>День по асценденту</h2>
+          <p id="asc-hero-sub">Рассчитайте ASC — мягкий ориентир дня + ИИ</p>
+          <span class="cta" id="asc-hero-cta">Открыть ↗</span>
+        </div>
+        <div class="hero-stack" aria-hidden="true">
+          <div class="mini-card back"></div>
+          <div class="mini-card mid"></div>
+          <div class="mini-card front">🌅</div>
+        </div>
+      </button>
+
+      <div class="profile-chip hidden" id="profile-chip">
+        <div>
+          <strong id="profile-chip-sign">—</strong>
+          <span class="muted" id="profile-chip-meta"></span>
+        </div>
+        <button type="button" class="chip-edit" id="btn-edit-profile">Изменить</button>
+      </div>
+
+      <button type="button" class="link-row" id="btn-day">
+        <span>☀️</span>
+        <span>Карта дня (1× в сутки)</span>
+        <span class="chev">›</span>
+      </button>
+
+      <h3 class="section-title">Расклады</h3>
+      <div class="question-box">
+        <label class="field">
+          <span>Ваш вопрос (необязательно)</span>
+          <input type="text" id="global-question" placeholder="Например: что важно в отношениях сейчас?" maxlength="200" />
+        </label>
+      </div>
+      <div class="spread-grid" id="spread-grid"></div>
+
+      <h3 class="section-title">Ещё</h3>
+      <button type="button" class="link-row" id="btn-history"><span>📖</span><span>История</span><span class="chev">›</span></button>
+      <button type="button" class="link-row" id="btn-transits"><span>🌌</span><span>Небо на неделю</span><span class="chev">›</span></button>
+      <button type="button" class="link-row" id="btn-journal"><span>📝</span><span>Журнал «как сбылось»</span><span class="pill-mini">PRO</span><span class="chev">›</span></button>
+      <button type="button" class="link-row" id="btn-premium"><span>⭐</span><span>Premium / Stars</span><span class="chev">›</span></button>
+      <button type="button" class="link-row" id="btn-profiles"><span>👤</span><span>Профили</span><span class="chev">›</span></button>
+      <button type="button" class="link-row" id="btn-library"><span>📚</span><span>Справочник карт</span><span class="chev">›</span></button>
+      <button type="button" class="link-row" id="btn-about"><span>🤍</span><span>О приложении</span><span class="chev">›</span></button>
+    </section>
+
+    <!-- DRAW -->
+    <section id="view-draw" class="view">
+      <button type="button" class="back-btn" data-go="home">← Назад</button>
+      <div class="draw-stage">
+        <p class="eyebrow" id="draw-eyebrow">расклад</p>
+        <h2 id="draw-title">—</h2>
+        <p class="muted" id="draw-blurb"></p>
+        <p class="muted" id="draw-q"></p>
+        <div class="deck-pile" id="deck-pile">
+          <div class="pile-card c1"></div>
+          <div class="pile-card c2"></div>
+          <div class="pile-card c3"></div>
+        </div>
+        <button type="button" class="primary-btn" id="btn-shuffle"><span id="shuffle-label">Перетасовать и вытянуть</span></button>
+      </div>
+    </section>
+
+    <!-- RESULT -->
+    <section id="view-result" class="view">
+      <button type="button" class="back-btn" data-go="home">← В меню</button>
+      <p class="eyebrow" id="result-eyebrow">ваш расклад</p>
+      <h2 id="result-title">Результат</h2>
+      <p class="muted" id="result-blurb"></p>
+      <div id="result-cards" class="result-cards"></div>
+      <div id="ai-box" class="ai-box hidden">
+        <div class="ai-label">✨ Прогноз ИИ</div>
+        <div id="ai-loading" class="ai-loading hidden">Пишу прогноз…</div>
+        <div id="ai-text" class="ai-text"></div>
+        <div id="ai-meta" class="ai-meta muted"></div>
+      </div>
+      <div class="journal-rate hidden" id="journal-rate">
+        <p class="muted">Как сбылось? (Premium)</p>
+        <div class="rate-row">
+          <button type="button" data-rate="1">😕</button>
+          <button type="button" data-rate="3">😐</button>
+          <button type="button" data-rate="5">😊</button>
+        </div>
+      </div>
+      <div class="result-actions">
+        <button type="button" class="primary-btn" id="btn-share">Поделиться карточкой</button>
+        <button type="button" class="ghost-btn" id="btn-speak">🔊 Озвучить</button>
+        <button type="button" class="ghost-btn" id="btn-again">Ещё раз</button>
+        <button type="button" class="ghost-btn" data-go="home">В меню</button>
+      </div>
+      <canvas id="share-canvas" width="1080" height="1350" class="hidden"></canvas>
+    </section>
+
+    <!-- PROFILE FORM -->
+    <section id="view-profile" class="view">
+      <button type="button" class="back-btn" data-go="home">← Назад</button>
+      <p class="eyebrow">асцендент</p>
+      <h2>Дата, время и место</h2>
+      <form id="profile-form" class="profile-form">
+        <label class="field"><span>Имя профиля</span><input type="text" id="f-label" value="Я" maxlength="40" /></label>
+        <label class="field"><span>Дата рождения</span><input type="date" id="f-date" required /></label>
+        <label class="field"><span>Время (местное)</span><input type="time" id="f-time" required /></label>
+        <p class="field-hint">Не знаете время — 12:00 (ASC приблизительный).</p>
+        <label class="field"><span>Место рождения</span><input type="text" id="f-place" required placeholder="Москва" /></label>
+        <p class="form-error hidden" id="form-error"></p>
+        <button type="submit" class="primary-btn" id="btn-calc-asc"><span id="calc-label">Рассчитать асцендент</span></button>
+      </form>
+    </section>
+
+    <!-- PROFILES LIST -->
+    <section id="view-profiles" class="view">
+      <button type="button" class="back-btn" data-go="home">← Назад</button>
+      <h2>Профили</h2>
+      <p class="muted">Я / партнёр / близкий — для ASC и совместимости</p>
+      <div id="profiles-list"></div>
+      <button type="button" class="primary-btn" id="btn-new-profile" style="margin-top:16px">+ Новый профиль</button>
+    </section>
+
+    <!-- COMPAT -->
+    <section id="view-compat" class="view">
+      <button type="button" class="back-btn" data-go="home">← Назад</button>
+      <p class="eyebrow">premium</p>
+      <h2>Совместимость «мы»</h2>
+      <p class="muted">Выберите два профиля (или один + подпись)</p>
+      <label class="field"><span>Вы</span><select id="compat-a"></select></label>
+      <label class="field"><span>Другой человек</span><select id="compat-b"></select></label>
+      <label class="field"><span>Вопрос</span><input type="text" id="compat-q" placeholder="Что важно между нами?" /></label>
+      <button type="button" class="primary-btn" id="btn-compat-go">Сделать расклад 💞</button>
+    </section>
+
+    <!-- HISTORY -->
+    <section id="view-history" class="view">
+      <button type="button" class="back-btn" data-go="home">← Назад</button>
+      <h2>История</h2>
+      <p class="muted">Free: 10 последних · Premium: 50</p>
+      <div id="history-list"></div>
+    </section>
+
+    <!-- TRANSITS -->
+    <section id="view-transits" class="view">
+      <button type="button" class="back-btn" data-go="home">← Назад</button>
+      <h2>Небо на неделю</h2>
+      <p class="muted" id="transits-note"></p>
+      <div id="transits-list"></div>
+    </section>
+
+    <!-- JOURNAL -->
+    <section id="view-journal" class="view">
+      <button type="button" class="back-btn" data-go="home">← Назад</button>
+      <h2>Журнал</h2>
+      <div id="journal-list"></div>
+    </section>
+
+    <!-- PREMIUM -->
+    <section id="view-premium" class="view">
+      <button type="button" class="back-btn" data-go="home">← Назад</button>
+      <p class="eyebrow">telegram stars</p>
+      <h2>Premium ⭐</h2>
+      <p class="muted">Оплата прямо в Telegram — без карты. Владельцу Stars приходят на бот, вывод через Fragment.</p>
+      <div id="plans-list"></div>
+      <div class="about-card" style="margin-top:16px">
+        <p><strong>Как платить:</strong> кнопка тарифа → бот выставит счёт в Stars → оплата в один тап.</p>
+        <p class="muted">Команда в боте: /premium</p>
+      </div>
+    </section>
+
+    <!-- LIBRARY -->
+    <section id="view-library" class="view">
+      <button type="button" class="back-btn" data-go="home">← Назад</button>
+      <h2>Справочник</h2>
+      <div class="lib-grid" id="lib-grid"></div>
+    </section>
+
+    <!-- CARD DETAIL -->
+    <section id="view-card" class="view">
+      <button type="button" class="back-btn" data-go="library">← К колоде</button>
+      <div id="card-detail"></div>
+    </section>
+
+    <!-- ABOUT -->
+    <section id="view-about" class="view">
+      <button type="button" class="back-btn" data-go="home">← Назад</button>
+      <h2>С теплом</h2>
+      <div class="about-card">
+        <p>Ленорман + асцендент (Swiss Ephemeris) + ИИ-прогноз. Светлый тон, без страшилок.</p>
+        <ul>
+          <li>Карта дня и ASC — 1 раз в сутки</li>
+          <li>ИИ: free 3/день · Premium безлимит</li>
+          <li>Оплата: Telegram Stars ⭐</li>
+        </ul>
+        <p class="muted">Не замена врачу, юристу или живому практику 🤍</p>
+      </div>
+    </section>
+  </div>
+
+  <script src="js/data.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

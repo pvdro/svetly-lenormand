@@ -1,0 +1,6 @@
+aiogram==3.22.0
+aiohttp>=3.9.0
+python-dotenv>=1.0.0
+aiosqlite>=0.20.0
+pyswisseph>=2.10.3
+timezonefinder>=6.5.0
