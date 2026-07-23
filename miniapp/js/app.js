@@ -1,4 +1,4 @@
-/* Астомания — Mini App (облако + локальный режим) */
+/* Астромания — Mini App (облако + локальный режим) */
 (function () {
   "use strict";
 
@@ -771,7 +771,7 @@
     ctx.fillRect(0, 0, w, h);
     ctx.fillStyle = "#3a2f36";
     ctx.font = "600 48px Georgia, serif";
-    ctx.fillText("Астомания", 80, 120);
+    ctx.fillText("Астромания", 80, 120);
     ctx.font = "28px sans-serif";
     ctx.fillStyle = "#9a8790";
     ctx.fillText(r.title || "Расклад", 80, 180);
@@ -796,7 +796,7 @@
       const file = new File([blob], "lenormand.png", { type: "image/png" });
       if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
         try {
-          await navigator.share({ files: [file], title: "Астомания" });
+          await navigator.share({ files: [file], title: "Астромания" });
           return;
         } catch (_) {}
       }

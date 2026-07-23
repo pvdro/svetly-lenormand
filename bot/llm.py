@@ -136,7 +136,7 @@ def _fetch_openrouter_free_models() -> list[str]:
     try:
         req = urllib.request.Request(
             "https://openrouter.ai/api/v1/models",
-            headers={"User-Agent": "SvetlyLenormand/1.0"},
+            headers={"User-Agent": "Astromania/1.0"},
             method="GET",
         )
         with urllib.request.urlopen(req, timeout=12) as resp:
@@ -269,7 +269,7 @@ def _chat_once(
     }
     if provider.name == "openrouter":
         headers["HTTP-Referer"] = "https://t.me/AstoManiabot"
-        headers["X-Title"] = "SvetlyLenormand"
+        headers["X-Title"] = "Astromania"
 
     req = urllib.request.Request(
         endpoint,

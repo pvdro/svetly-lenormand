@@ -136,7 +136,7 @@ def _http_get_json(url: str, timeout: float = 12.0) -> dict | list:
     req = urllib.request.Request(
         url,
         headers={
-            "User-Agent": "SvetlyLenormandBot/1.0 (local miniapp; educational)",
+            "User-Agent": "AstromaniaBot/1.0 (local miniapp; educational)",
             "Accept": "application/json",
         },
     )

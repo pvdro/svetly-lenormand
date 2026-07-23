@@ -67,7 +67,7 @@ async def notify_loop(bot) -> None:
 
                     await bot.send_message(
                         u["user_id"],
-                        "🌅 Доброе утро! Ваш день в Астомании — карта дня или день по восходящему знаку 👇",
+                        "🌅 Доброе утро! Ваш день в Астромании — карта дня или день по восходящему знаку 👇",
                         parse_mode="Markdown",
                         reply_markup=open_app_inline(),
                     )
