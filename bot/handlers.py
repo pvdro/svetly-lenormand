@@ -410,9 +410,16 @@ async def _run_asc_day(message: Message) -> None:
     left = 999 if prem else store.free_ai_left(uid, free_limit=FREE_AI_READINGS_PER_DAY)
     agate = feature_allowed("ai", is_premium=prem, free_ai_left=left)
 
+    sun_l = ""
+    if prof.get("sun_sign"):
+        sun_l = f"☀️ Солнце: {prof.get('sun_emoji', '')} {prof['sun_sign']}\n"
+    moon_l = ""
+    if prof.get("moon_sign"):
+        moon_l = f"🌙 Луна: {prof.get('moon_emoji', '')} {prof['moon_sign']}\n"
     header = (
         f"🌅 **День по восходящему знаку · {prof.get('emoji', '')} {prof['sign']}**\n"
-        f"_{prof.get('degree_in_sign', '')}° · {prof.get('place', '')}_\n\n"
+        f"{sun_l}{moon_l}"
+        f"_{prof.get('degree_in_sign', '')}° ASC · {prof.get('place', '')}_\n\n"
         f"Карта: {card.emoji} **{card.number}. {card.name}**\n_{card.keywords}_\n{card.general}\n"
     )
     if agate["ok"]:
@@ -1106,8 +1113,13 @@ async def text_router(message: Message) -> None:
             store.save_profile(uid, data, label="Я", make_default=True)
             _waiting_birth.discard(uid)
             await message.answer(
-                f"✅ Восходящий знак: **{data['emoji']} {data['sign']}** "
-                f"({data['degree_in_sign']}°)\n_{data['place']}_",
+                f"✅ Карта рождения · _{data['place']}_\n\n"
+                f"☀️ **Солнце:** {data.get('sun_emoji', '')} **{data.get('sun_sign', '—')}** "
+                f"({data.get('sun_degree', '')}°)\n"
+                f"🌙 **Луна:** {data.get('moon_emoji', '')} **{data.get('moon_sign', '—')}** "
+                f"({data.get('moon_degree', '')}°)\n"
+                f"⬆️ **Восходящий:** {data['emoji']} **{data['sign']}** "
+                f"({data['degree_in_sign']}°)",
                 parse_mode="Markdown",
                 reply_markup=main_menu(),
             )

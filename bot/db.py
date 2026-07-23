@@ -147,6 +147,21 @@ def init_db() -> None:
         conn.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_ref_code ON users(ref_code) WHERE ref_code IS NOT NULL"
         )
+        # sun / moon in profiles
+        pcols = {r[1] for r in conn.execute("PRAGMA table_info(profiles)").fetchall()}
+        for col, decl in (
+            ("sun_sign", "TEXT"),
+            ("sun_emoji", "TEXT"),
+            ("sun_degree", "REAL"),
+            ("moon_sign", "TEXT"),
+            ("moon_emoji", "TEXT"),
+            ("moon_degree", "REAL"),
+        ):
+            if col not in pcols:
+                try:
+                    conn.execute(f"ALTER TABLE profiles ADD COLUMN {col} {decl}")
+                except Exception:
+                    pass
 
 
 def upsert_user(
@@ -517,10 +532,15 @@ def save_profile(user_id: int, data: dict, label: str = "Я", make_default: bool
     with db() as conn:
         if make_default:
             conn.execute("UPDATE profiles SET is_default=0 WHERE user_id=?", (user_id,))
+        # sun/moon may be nested
+        sun = data.get("sun") or {}
+        moon = data.get("moon") or {}
         cur = conn.execute(
             "INSERT INTO profiles(user_id, label, birth_date, birth_time, place, lat, lon, timezone, "
-            "sign, emoji, degree_in_sign, absolute_degree, is_default, created_at) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "sign, emoji, degree_in_sign, absolute_degree, "
+            "sun_sign, sun_emoji, sun_degree, moon_sign, moon_emoji, moon_degree, "
+            "is_default, created_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 user_id,
                 label,
@@ -534,6 +554,12 @@ def save_profile(user_id: int, data: dict, label: str = "Я", make_default: bool
                 data.get("emoji"),
                 data.get("degree_in_sign"),
                 data.get("absolute_degree"),
+                data.get("sun_sign") or sun.get("sign"),
+                data.get("sun_emoji") or sun.get("emoji"),
+                data.get("sun_degree") or sun.get("degree_in_sign"),
+                data.get("moon_sign") or moon.get("sign"),
+                data.get("moon_emoji") or moon.get("emoji"),
+                data.get("moon_degree") or moon.get("degree_in_sign"),
                 1 if make_default else 0,
                 now,
             ),

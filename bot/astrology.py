@@ -118,6 +118,15 @@ class GeoPlace:
 
 
 @dataclass
+class SignPos:
+    sign: str
+    sign_en: str
+    emoji: str
+    degree_in_sign: float
+    absolute_degree: float
+
+
+@dataclass
 class AscendantResult:
     sign: str
     sign_en: str
@@ -130,6 +139,17 @@ class AscendantResult:
     place: str
     local_datetime: str
     utc_datetime: str
+    # Солнце и Луна (натал на момент рождения)
+    sun_sign: str = ""
+    sun_sign_en: str = ""
+    sun_emoji: str = ""
+    sun_degree: float = 0.0
+    sun_absolute: float = 0.0
+    moon_sign: str = ""
+    moon_sign_en: str = ""
+    moon_emoji: str = ""
+    moon_degree: float = 0.0
+    moon_absolute: float = 0.0
 
 
 def _http_get_json(url: str, timeout: float = 12.0) -> dict | list:
@@ -221,25 +241,45 @@ def calculate_ascendant(
     )
     jd = swe.julday(utc_dt.year, utc_dt.month, utc_dt.day, hour_ut)
 
-    # Placidus houses
+    def lon_to_sign(lon: float) -> SignPos:
+        abs_deg = float(lon) % 360.0
+        idx = int(abs_deg // 30) % 12
+        deg = abs_deg - idx * 30
+        name, emoji, en = SIGNS_RU[idx]
+        return SignPos(name, en, emoji, round(deg, 2), round(abs_deg, 4))
+
+    # Солнце и Луна
+    sun_xx, _ = swe.calc_ut(jd, swe.SUN)
+    moon_xx, _ = swe.calc_ut(jd, swe.MOON)
+    sun = lon_to_sign(sun_xx[0])
+    moon = lon_to_sign(moon_xx[0])
+
+    # Placidus houses → ASC
     _cusps, ascmc = swe.houses(jd, lat, lon, b"P")
-    asc_abs = float(ascmc[0]) % 360.0
-    sign_idx = int(asc_abs // 30) % 12
-    deg_in_sign = asc_abs - sign_idx * 30
-    name, emoji, en = SIGNS_RU[sign_idx]
+    asc = lon_to_sign(float(ascmc[0]))
 
     return AscendantResult(
-        sign=name,
-        sign_en=en,
-        emoji=emoji,
-        degree_in_sign=round(deg_in_sign, 2),
-        absolute_degree=round(asc_abs, 4),
+        sign=asc.sign,
+        sign_en=asc.sign_en,
+        emoji=asc.emoji,
+        degree_in_sign=asc.degree_in_sign,
+        absolute_degree=asc.absolute_degree,
         lat=round(lat, 5),
         lon=round(lon, 5),
         timezone=tz_name,
         place=place_name,
         local_datetime=local_dt.isoformat(),
         utc_datetime=utc_dt.isoformat(),
+        sun_sign=sun.sign,
+        sun_sign_en=sun.sign_en,
+        sun_emoji=sun.emoji,
+        sun_degree=sun.degree_in_sign,
+        sun_absolute=sun.absolute_degree,
+        moon_sign=moon.sign,
+        moon_sign_en=moon.sign_en,
+        moon_emoji=moon.emoji,
+        moon_degree=moon.degree_in_sign,
+        moon_absolute=moon.absolute_degree,
     )
 
 
@@ -248,11 +288,76 @@ def day_reading_for_asc(sign: str) -> dict:
     return {
         "sign": sign,
         "emoji": next((e for n, e, _ in SIGNS_RU if n == sign), "✦"),
+        "kind": "asc",
         **block,
+    }
+
+
+def day_reading_for_sun(sign: str) -> dict:
+    """Тон дня через солнечный знак (ядро личности / «я»)."""
+    block = ASC_DAY.get(sign) or ASC_DAY["Лев"]
+    # перефразируем заголовки под Солнце
+    mood = (block.get("mood") or "").replace("Асцендент", "Солнце")
+    body = (block.get("body") or "").replace("Асцендент", "Солнце")
+    # если не заменили (тексты про ASC в знаке) — мягкая обёртка
+    if "Асцендент" in (block.get("body") or ""):
+        body = block["body"]
+    return {
+        "sign": sign,
+        "emoji": next((e for n, e, _ in SIGNS_RU if n == sign), "☀️"),
+        "kind": "sun",
+        "mood": f"Солнце · {mood}" if mood else f"Солнце в знаке {sign}",
+        "body": (
+            f"Ваше Солнце в знаке {sign}. Это ядро «кто я» и источник дневной силы. "
+            f"{body}"
+        ),
+        "focus": block.get("focus") or "",
+        "care": block.get("care") or "",
+    }
+
+
+def day_reading_for_moon(sign: str) -> dict:
+    """Тон дня через лунный знак (чувства / потребности)."""
+    block = ASC_DAY.get(sign) or ASC_DAY["Рак"]
+    return {
+        "sign": sign,
+        "emoji": next((e for n, e, _ in SIGNS_RU if n == sign), "🌙"),
+        "kind": "moon",
+        "mood": f"Луна · {(block.get('mood') or sign)}",
+        "body": (
+            f"Ваша Луна в знаке {sign}. Это про эмоции, привычки заботы и то, что питает душу сегодня. "
+            f"{block.get('body') or ''}"
+        ),
+        "focus": block.get("focus") or "",
+        "care": block.get("care") or "",
     }
 
 
 def result_to_dict(r: AscendantResult) -> dict:
     d = asdict(r)
     d["day"] = day_reading_for_asc(r.sign)
+    d["sun_day"] = day_reading_for_sun(r.sun_sign) if r.sun_sign else None
+    d["moon_day"] = day_reading_for_moon(r.moon_sign) if r.moon_sign else None
+    # удобные вложенные блоки
+    d["sun"] = {
+        "sign": r.sun_sign,
+        "sign_en": r.sun_sign_en,
+        "emoji": r.sun_emoji,
+        "degree_in_sign": r.sun_degree,
+        "absolute_degree": r.sun_absolute,
+    }
+    d["moon"] = {
+        "sign": r.moon_sign,
+        "sign_en": r.moon_sign_en,
+        "emoji": r.moon_emoji,
+        "degree_in_sign": r.moon_degree,
+        "absolute_degree": r.moon_absolute,
+    }
+    d["asc"] = {
+        "sign": r.sign,
+        "sign_en": r.sign_en,
+        "emoji": r.emoji,
+        "degree_in_sign": r.degree_in_sign,
+        "absolute_degree": r.absolute_degree,
+    }
     return d

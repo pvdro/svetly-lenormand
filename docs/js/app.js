@@ -347,12 +347,15 @@
         if (chip) chip.classList.remove("hidden");
         const s = $("#profile-chip-sign");
         const m = $("#profile-chip-meta");
-        if (s) s.textContent = `${local.emoji || "✦"} Восходящий знак: ${local.sign}`;
-        if (m) m.textContent = local.place || "";
+        updateProfileChip(local);
         const sub = $("#asc-hero-sub");
         const cta = $("#asc-hero-cta");
-        if (sub) sub.textContent = `Восходящий знак ${local.sign} — ваш личный день`;
-        if (cta) cta.textContent = "Открыть день ↗";
+        if (sub) {
+          sub.textContent = uiLang === "en"
+            ? `Sun · Moon · Rising — your personal day`
+            : `Солнце · Луна · Восходящий — ваш личный день`;
+        }
+        if (cta) cta.textContent = tr("asc_cta");
       }
 
       setStatus("Проверяю связь…", "·");
@@ -389,12 +392,7 @@
         if (me.ref_code) window.__REF_CODE = me.ref_code;
         if (me.profile && me.profile.sign) {
           saveLocalProfile(me.profile);
-          const chip = $("#profile-chip");
-          if (chip) chip.classList.remove("hidden");
-          const s = $("#profile-chip-sign");
-          const m = $("#profile-chip-meta");
-          if (s) s.textContent = `${me.profile.emoji || "✦"} Восходящий знак: ${me.profile.sign}`;
-          if (m) m.textContent = me.profile.place || "";
+          updateProfileChip(me.profile);
         }
       } catch (_) {
         me = { premium: { active: false }, free_ai_used: 0, free_ai_limit: 3, profile: local, is_owner: false };
@@ -412,6 +410,29 @@
     if (btn) btn.classList.toggle("hidden", !isOwner);
   }
 
+  function updateProfileChip(p) {
+    if (!p || !p.sign) return;
+    const chip = $("#profile-chip");
+    if (chip) chip.classList.remove("hidden");
+    const s = $("#profile-chip-sign");
+    const m = $("#profile-chip-meta");
+    const b3 = $("#profile-chip-big3");
+    if (s) {
+      s.textContent = uiLang === "en"
+        ? `${p.emoji || "✦"} Rising ${p.sign}`
+        : `${p.emoji || "✦"} Восходящий: ${p.sign}`;
+    }
+    if (b3) {
+      const sun = p.sun_sign ? `${p.sun_emoji || "☀️"} ${p.sun_sign}` : "";
+      const moon = p.moon_sign ? `${p.moon_emoji || "🌙"} ${p.moon_sign}` : "";
+      const asc = `${p.emoji || "⬆️"} ${p.sign}`;
+      b3.textContent = [sun && `☀️ ${p.sun_sign}`, moon && `🌙 ${p.moon_sign}`, `⬆️ ${p.sign}`]
+        .filter(Boolean)
+        .join(" · ");
+    }
+    if (m) m.textContent = p.place || "";
+  }
+
   function updateStreak(n) {
     const chip = $("#streak-chip");
     const txt = $("#streak-text");
@@ -427,7 +448,29 @@
   function openQuick(id) {
     if (id === "day") openDay("day");
     else if (id === "t_day") startSpread("t_day");
+    else if (id === "sun_day" || id === "moon_day" || id === "asc_day") openDay(id);
     else startSpread(id);
+  }
+
+  function openAstroDay(kind) {
+    const p = loadLocalProfile();
+    if (!p || !p.sign) {
+      toast(tr("need_profile"));
+      show("profile");
+      return;
+    }
+    if (kind === "sun_day" && !p.sun_sign) {
+      // старый профиль без солнца — пересчитать
+      toast(tr("need_profile"));
+      show("profile");
+      return;
+    }
+    if (kind === "moon_day" && !p.moon_sign) {
+      toast(tr("need_profile"));
+      show("profile");
+      return;
+    }
+    openDay(kind);
   }
 
   function handleDeepLink() {
@@ -777,29 +820,51 @@
       }
     }
 
-    if (kind === "asc_day") {
+    if (kind === "asc_day" || kind === "sun_day" || kind === "moon_day") {
       const p = loadLocalProfile();
       if (!p || !p.sign) {
         show("profile");
         return;
       }
-      const card = cardForDay(p.sign);
-      const day = (data.ascDay && data.ascDay[p.sign]) || {};
+      let sign = p.sign;
+      let emoji = p.emoji || "✦";
+      let title = uiLang === "en" ? `Day by rising · ${sign}` : `День по восходящему · ${sign}`;
+      let pos = uiLang === "en" ? "Rising day" : "День ASC";
+      if (kind === "sun_day") {
+        sign = p.sun_sign || p.sign;
+        emoji = p.sun_emoji || "☀️";
+        title = uiLang === "en" ? `Day by Sun · ${sign}` : `День по Солнцу · ${sign}`;
+        pos = uiLang === "en" ? "Solar day" : "Солнечный день";
+      } else if (kind === "moon_day") {
+        sign = p.moon_sign || p.sign;
+        emoji = p.moon_emoji || "🌙";
+        title = uiLang === "en" ? `Day by Moon · ${sign}` : `День по Луне · ${sign}`;
+        pos = uiLang === "en" ? "Lunar day" : "Лунный день";
+      }
+      const card = cardForDay(sign + kind);
+      const day = (data.ascDay && data.ascDay[sign]) || {};
+      const label =
+        kind === "sun_day" ? (uiLang === "en" ? "Sun" : "Солнце")
+        : kind === "moon_day" ? (uiLang === "en" ? "Moon" : "Луна")
+        : (uiLang === "en" ? "Rising" : "Восходящий");
       const text = [
-        `${day.mood || "Ваш день"}`,
+        `${emoji} ${label}: ${sign}`,
+        day.mood || "",
         day.body || "",
-        day.focus ? `Фокус: ${day.focus}` : "",
-        day.care ? `Забота: ${day.care}` : "",
-        `Карта дня: ${card.name} — ${card.general}`,
-        `Совет: ${card.advice}`,
+        day.focus ? (uiLang === "en" ? `Focus: ${day.focus}` : `Фокус: ${day.focus}`) : "",
+        day.care ? (uiLang === "en" ? `Care: ${day.care}` : `Забота: ${day.care}`) : "",
+        uiLang === "en"
+          ? `Card: ${card.name} — ${card.general}`
+          : `Карта: ${card.name} — ${card.general}`,
+        uiLang === "en" ? `Advice: ${card.advice}` : `Совет: ${card.advice}`,
       ]
         .filter(Boolean)
         .join("\n\n");
       showResult({
-        title: `День по восходящему знаку · ${p.sign}`,
-        emoji: "🌅",
+        title,
+        emoji: kind === "sun_day" ? "☀️" : kind === "moon_day" ? "🌙" : "🌅",
         cards: [card],
-        positions: ["Карта дня"],
+        positions: [pos],
         ai_text: text,
         ai: false,
         provider: "local",
@@ -1165,6 +1230,9 @@
 
   document.querySelectorAll("[data-quick]").forEach((btn) => {
     btn.addEventListener("click", () => openQuick(btn.getAttribute("data-quick")));
+  });
+  document.querySelectorAll("[data-astro-day]").forEach((btn) => {
+    btn.addEventListener("click", () => openAstroDay(btn.getAttribute("data-astro-day")));
   });
 
   const btnInvite = $("#btn-invite");

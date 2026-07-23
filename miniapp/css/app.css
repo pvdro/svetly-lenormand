@@ -974,6 +974,16 @@ h3.section-title {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
 }
+.profile-big-three {
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--ink-soft);
+}
+.quick-grid-astro {
+  grid-template-columns: 1fr 1fr 1fr;
+}
 .question-box {
   margin-bottom: 12px;
   position: relative;

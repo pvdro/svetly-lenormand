@@ -625,15 +625,40 @@ class Handler(SimpleHTTPRequestHandler):
             )
 
         # build cards
-        if kind == "asc_day":
+        if kind in ("asc_day", "sun_day", "moon_day"):
+            from bot.astrology import day_reading_for_asc, day_reading_for_moon, day_reading_for_sun
+            from bot.llm import build_asc_day_prompt
+
             prof = store.get_default_profile(uid)
             if not prof and body.get("profile"):
                 prof = body["profile"]
             if not prof or not prof.get("sign"):
-                return _json(self, 400, {"error": "Сначала рассчитайте восходящий знак", "need_profile": True})
-            # deterministic card
+                return _json(self, 400, {"error": "Сначала рассчитайте карту рождения", "need_profile": True})
+
+            if kind == "sun_day":
+                sign = prof.get("sun_sign") or prof.get("sign")
+                emoji = prof.get("sun_emoji") or "☀️"
+                degree = float(prof.get("sun_degree") or prof.get("degree_in_sign") or 0)
+                label = f"День по Солнцу · {emoji} {sign}"
+                base = day_reading_for_sun(sign)
+                seed_key = f"sun-{sign}-{degree}"
+            elif kind == "moon_day":
+                sign = prof.get("moon_sign") or prof.get("sign")
+                emoji = prof.get("moon_emoji") or "🌙"
+                degree = float(prof.get("moon_degree") or prof.get("degree_in_sign") or 0)
+                label = f"День по Луне · {emoji} {sign}"
+                base = day_reading_for_moon(sign)
+                seed_key = f"moon-{sign}-{degree}"
+            else:
+                sign = prof["sign"]
+                emoji = prof.get("emoji") or "✦"
+                degree = float(prof.get("degree_in_sign") or 0)
+                label = f"День по восходящему · {emoji} {sign}"
+                base = day_reading_for_asc(sign)
+                seed_key = f"asc-{sign}-{prof.get('absolute_degree', 0)}"
+
             day_key = store.today_key()
-            seed_s = f"{day_key}-{prof['sign']}-{prof.get('absolute_degree', 0)}"
+            seed_s = f"{day_key}-{seed_key}"
             h = int(hashlib.sha256(seed_s.encode()).hexdigest(), 16)
             card = DECK[h % len(DECK)]
             cards_d = [
@@ -648,16 +673,33 @@ class Handler(SimpleHTTPRequestHandler):
                     "advice": card.advice,
                 }
             ]
-            title = f"День по восходящему знаку · {prof['sign']}"
+            title = label
             prompt = build_asc_day_prompt(
-                sign=prof["sign"],
-                emoji=prof.get("emoji") or "✦",
-                degree=float(prof.get("degree_in_sign") or 0),
+                sign=sign,
+                emoji=emoji,
+                degree=degree,
                 place=prof.get("place") or "",
                 card=cards_d[0],
-                base_day=None,
+                base_day=base,
             )
-            meta = {"profile": {"sign": prof["sign"], "emoji": prof.get("emoji"), "place": prof.get("place")}}
+            # уточним в промпте систему
+            if kind == "sun_day":
+                prompt = "Система: натальное Солнце (ядро личности).\n" + prompt
+            elif kind == "moon_day":
+                prompt = "Система: натальная Луна (чувства и потребности).\n" + prompt
+            else:
+                prompt = "Система: восходящий знак (как встречаете день).\n" + prompt
+            meta = {
+                "profile": {
+                    "sign": prof.get("sign"),
+                    "sun_sign": prof.get("sun_sign"),
+                    "moon_sign": prof.get("moon_sign"),
+                    "emoji": emoji,
+                    "place": prof.get("place"),
+                    "kind": kind,
+                },
+                "base_day": base,
+            }
         else:
             spread = SPREADS["day"]
             from bot.cards import draw
@@ -710,7 +752,7 @@ class Handler(SimpleHTTPRequestHandler):
             ai_text = fallback_spread_text(cards_d, title)
             meta["limit"] = agate
 
-        if kind in ("day", "t_day", "asc_day"):
+        if kind in ("day", "t_day", "asc_day", "sun_day", "moon_day"):
             store.touch_day_streak(uid)
         rid = store.save_reading(uid, kind, title, None, cards_d, ai_text, {**meta, "provider": provider, "model": model})
         _json(
