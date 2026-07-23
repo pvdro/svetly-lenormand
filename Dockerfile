@@ -23,5 +23,5 @@ RUN mkdir -p /app/data && chmod 777 /app/data
 
 EXPOSE 8080
 
-# Единый процесс: Mini App + API + Telegram webhook
-CMD ["python", "app_server.py"]
+# Веб (приложение) + бот (long polling — надёжнее, если веб снаружи режется)
+CMD ["python", "start.py"]

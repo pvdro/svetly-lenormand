@@ -1,8 +1,11 @@
-"""Бот: приложение + полный доступ (звёзды) + уведомления."""
+"""Бот: расклады в чате + полный доступ (звёзды). Приложение — опционально."""
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
-import os
+import re
+from datetime import date
 
 from aiogram import F, Router
 from aiogram.filters import Command, CommandStart
@@ -11,61 +14,269 @@ from aiogram.types import (
     LabeledPrice,
     Message,
     PreCheckoutQuery,
-    ReplyKeyboardRemove,
 )
 
 from bot import db as store
-from bot.keyboards import open_app_inline, premium_inline
-from bot.premium import PLANS, plan_by_payload
-from bot.texts import WELCOME, NO_APP, PREMIUM_INFO, HOW_MONEY
+from bot.cards import DECK, draw
+from bot.keyboards import after_spread, main_menu, open_app_inline, premium_inline
+from bot.llm import build_asc_day_prompt, build_spread_prompt, chat, fallback_spread_text
+from bot.premium import FREE_AI_READINGS_PER_DAY, PLANS, feature_allowed, plan_by_payload
+from bot.spreads import SPREADS
+from bot.texts import ASK_BIRTH, HELP, HOW_MONEY, NO_APP, PREMIUM_INFO, WELCOME
 
 logger = logging.getLogger(__name__)
 router = Router()
+
+# user_id -> waiting for birth data
+_waiting_birth: set[int] = set()
+# user_id -> last free-text question
+_last_question: dict[int, str] = {}
+
+BUTTON_TO_SPREAD = {
+    "☀️ Карта дня": "day",
+    "✨ Три карты": "three",
+    "💗 Любовь": "love",
+    "🌿 Ситуация": "situation",
+    "🌻 Дело": "work",
+    "🔮 Да / Нет": "yesno",
+    "🌈 Путь": "path",
+    "📅 Неделя": "week",
+    "🗓️ Месяц": "month",
+}
+
+
+def _chunk(text: str, limit: int = 3900) -> list[str]:
+    if len(text) <= limit:
+        return [text]
+    parts, buf, size = [], [], 0
+    for line in text.split("\n"):
+        add = len(line) + 1
+        if size + add > limit and buf:
+            parts.append("\n".join(buf))
+            buf, size = [line], add
+        else:
+            buf.append(line)
+            size += add
+    if buf:
+        parts.append("\n".join(buf))
+    return parts
+
+
+async def _send_long(message: Message, text: str, **kwargs) -> None:
+    chunks = _chunk(text)
+    for i, c in enumerate(chunks):
+        kw = kwargs if i == len(chunks) - 1 else {k: v for k, v in kwargs.items() if k != "reply_markup"}
+        await message.answer(c, **kw)
+
+
+def _cards_to_dicts(cards) -> list[dict]:
+    return [
+        {
+            "number": c.number,
+            "name": c.name,
+            "emoji": c.emoji,
+            "keywords": c.keywords,
+            "general": c.general,
+            "love": c.love,
+            "work": c.work,
+            "advice": c.advice,
+        }
+        for c in cards
+    ]
+
+
+async def _run_spread(message: Message, spread_id: str, question: str | None = None) -> None:
+    user = message.from_user
+    if not user:
+        return
+    uid = user.id
+    store.upsert_user(uid, user.username, user.first_name)
+
+    if spread_id not in SPREADS:
+        await message.answer("Расклад не найден.", reply_markup=main_menu())
+        return
+
+    spread = SPREADS[spread_id]
+    prem = store.is_premium(uid)
+    gate = feature_allowed(spread_id, is_premium=prem, free_ai_left=1)
+    if not gate["ok"]:
+        await message.answer(gate["message"], reply_markup=premium_inline())
+        return
+
+    # day once
+    if spread_id == "day":
+        existing = store.get_day_reading(uid, "day")
+        if existing and existing.get("ai_text"):
+            await _send_long(
+                message,
+                f"☀️ **Карта дня** (уже на сегодня)\n\n{existing['ai_text']}",
+                parse_mode="Markdown",
+                reply_markup=after_spread("day"),
+            )
+            return
+
+    await message.answer("🕊️ Тасую карты и готовлю прогноз…")
+
+    cards = draw(spread.n_cards)
+    cards_d = _cards_to_dicts(cards)
+
+    # format cards
+    lines = [f"{spread.emoji} **{spread.title}**\n_{spread.blurb}_\n"]
+    if question:
+        lines.append(f"Вопрос: _{question}_\n")
+    for i, c in enumerate(cards_d):
+        pos = spread.positions[i] if i < len(spread.positions) else f"Карта {i+1}"
+        lines.append(f"**{pos}**\n{c['emoji']} **{c['number']}. {c['name']}**\n_{c['keywords']}_\n{c['general']}\n")
+
+    used = store.count_ai_today(uid)
+    left = 999 if prem else max(0, FREE_AI_READINGS_PER_DAY - used)
+    agate = feature_allowed("ai", is_premium=prem, free_ai_left=left)
+
+    ai_text = None
+    if agate["ok"]:
+        prompt = build_spread_prompt(
+            spread_title=spread.title,
+            spread_blurb=spread.blurb,
+            cards=cards_d,
+            positions=list(spread.positions),
+            question=question,
+        )
+        try:
+            ai_text, provider, model = chat(prompt)
+            if not prem:
+                store.inc_ai_today(uid)
+            lines.append(f"\n✨ **Живой прогноз**\n{ai_text}")
+        except Exception as e:
+            ai_text = fallback_spread_text(cards_d, spread.title)
+            lines.append(f"\n✨ **Прогноз**\n{ai_text}\n\n_(Краткий режим: {e})_")
+    else:
+        lines.append(f"\n_{agate['message']}_")
+        ai_text = "\n".join(lines)
+
+    text = "\n".join(lines)
+    store.save_reading(uid, spread_id, spread.title, question, cards_d, ai_text or text, {})
+    await _send_long(message, text, parse_mode="Markdown", reply_markup=after_spread(spread_id))
+
+
+def _parse_birth(text: str) -> tuple[str, str, str] | None:
+    """
+    Accept: 15.06.1990 14:30 Москва
+            1990-06-15 14:30 Москва
+    Returns (YYYY-MM-DD, HH:MM, place)
+    """
+    t = " ".join(text.strip().split())
+    m = re.match(
+        r"^(\d{1,2})[./](\d{1,2})[./](\d{4})\s+(\d{1,2}):(\d{2})(?:\s*:\d{2})?\s+(.+)$",
+        t,
+    )
+    if m:
+        d, mo, y, h, mi, place = m.groups()
+        return f"{int(y):04d}-{int(mo):02d}-{int(d):02d}", f"{int(h):02d}:{int(mi):02d}", place.strip()
+    m = re.match(
+        r"^(\d{4})-(\d{2})-(\d{2})\s+(\d{1,2}):(\d{2})(?:\s*:\d{2})?\s+(.+)$",
+        t,
+    )
+    if m:
+        y, mo, d, h, mi, place = m.groups()
+        return f"{y}-{mo}-{d}", f"{int(h):02d}:{int(mi):02d}", place.strip()
+    return None
+
+
+async def _run_asc_day(message: Message) -> None:
+    user = message.from_user
+    if not user:
+        return
+    uid = user.id
+    prof = store.get_default_profile(uid)
+    if not prof or not prof.get("sign"):
+        _waiting_birth.add(uid)
+        await message.answer(ASK_BIRTH, parse_mode="Markdown", reply_markup=main_menu())
+        return
+
+    existing = store.get_day_reading(uid, "asc_day")
+    if existing and existing.get("ai_text"):
+        await _send_long(
+            message,
+            f"🌅 **День по восходящему** (уже на сегодня)\n\n{existing['ai_text']}",
+            parse_mode="Markdown",
+            reply_markup=main_menu(),
+        )
+        return
+
+    await message.answer("🕊️ Считаю день по восходящему…")
+    day_key = store.today_key()
+    seed = f"{day_key}-{prof['sign']}-{prof.get('absolute_degree', 0)}"
+    h = int(hashlib.sha256(seed.encode()).hexdigest(), 16)
+    card = DECK[h % len(DECK)]
+    cards_d = _cards_to_dicts([card])
+
+    prompt = build_asc_day_prompt(
+        sign=prof["sign"],
+        emoji=prof.get("emoji") or "✦",
+        degree=float(prof.get("degree_in_sign") or 0),
+        place=prof.get("place") or "",
+        card=cards_d[0],
+    )
+    prem = store.is_premium(uid)
+    used = store.count_ai_today(uid)
+    left = 999 if prem else max(0, FREE_AI_READINGS_PER_DAY - used)
+    agate = feature_allowed("ai", is_premium=prem, free_ai_left=left)
+
+    header = (
+        f"🌅 **День по восходящему · {prof.get('emoji', '')} {prof['sign']}**\n"
+        f"_{prof.get('degree_in_sign', '')}° · {prof.get('place', '')}_\n\n"
+        f"Карта: {card.emoji} **{card.number}. {card.name}**\n_{card.keywords}_\n{card.general}\n"
+    )
+    if agate["ok"]:
+        try:
+            ai_text, _, _ = chat(prompt)
+            if not prem:
+                store.inc_ai_today(uid)
+            text = header + f"\n✨ **Живой прогноз**\n{ai_text}"
+        except Exception as e:
+            text = header + f"\n✨ **Прогноз**\n{fallback_spread_text(cards_d, 'День')}\n\n_({e})_"
+    else:
+        text = header + f"\n_{agate['message']}_"
+
+    store.save_reading(uid, "asc_day", f"День · {prof['sign']}", None, cards_d, text, {"profile": prof["sign"]})
+    await _send_long(message, text, parse_mode="Markdown", reply_markup=main_menu())
 
 
 @router.message(CommandStart())
 async def cmd_start(message: Message) -> None:
     if message.from_user:
-        store.upsert_user(
-            message.from_user.id,
-            message.from_user.username,
-            message.from_user.first_name,
+        store.upsert_user(message.from_user.id, message.from_user.username, message.from_user.first_name)
+    await message.answer(WELCOME, parse_mode="Markdown", reply_markup=main_menu())
+    app_kb = open_app_inline()
+    if app_kb:
+        await message.answer(
+            "Можно также открыть красивое приложение (если сеть позволяет):",
+            reply_markup=app_kb,
         )
-    await message.answer(WELCOME, parse_mode="Markdown", reply_markup=ReplyKeyboardRemove())
-    kb = open_app_inline()
-    if kb:
-        await message.answer("Нажмите, чтобы открыть приложение 👇", reply_markup=kb)
-    else:
-        await message.answer(NO_APP, parse_mode="Markdown")
-
     args = (message.text or "").split(maxsplit=1)
-    if len(args) > 1 and args[1].strip().lower() in (
-        "premium",
-        "pay",
-        "stars",
-        "dostup",
-        "доступ",
-    ):
+    if len(args) > 1 and args[1].strip().lower() in ("premium", "pay", "stars", "dostup", "доступ"):
         await cmd_premium(message)
 
 
 @router.message(Command("app", "open", "menu", "приложение"))
 async def cmd_app(message: Message) -> None:
+    await message.answer("Меню раскладов 👇", reply_markup=main_menu())
     kb = open_app_inline()
     if kb:
-        await message.answer("✨ Откройте приложение:", reply_markup=kb)
+        await message.answer("Приложение (если открывается):", reply_markup=kb)
     else:
-        await message.answer(NO_APP, parse_mode="Markdown")
+        await message.answer(NO_APP, reply_markup=main_menu())
+
+
+@router.message(Command("help", "помощь"))
+async def cmd_help(message: Message) -> None:
+    await message.answer(HELP, parse_mode="Markdown", reply_markup=main_menu())
 
 
 @router.message(Command("premium", "stars", "pay", "dostup", "доступ"))
 async def cmd_premium(message: Message) -> None:
     if message.from_user:
-        store.upsert_user(
-            message.from_user.id,
-            message.from_user.username,
-            message.from_user.first_name,
-        )
+        store.upsert_user(message.from_user.id, message.from_user.username, message.from_user.first_name)
         info = store.premium_info(message.from_user.id)
         status = (
             f"\n\n✅ У вас **полный доступ** до `{info['until'][:10]}`"
@@ -74,16 +285,64 @@ async def cmd_premium(message: Message) -> None:
         )
     else:
         status = ""
-    await message.answer(
-        PREMIUM_INFO + status,
-        parse_mode="Markdown",
-        reply_markup=premium_inline(),
-    )
+    await message.answer(PREMIUM_INFO + status, parse_mode="Markdown", reply_markup=premium_inline())
 
 
 @router.message(Command("money", "withdraw", "вывод"))
 async def cmd_money(message: Message) -> None:
-    await message.answer(HOW_MONEY, parse_mode="Markdown")
+    await message.answer(HOW_MONEY, parse_mode="Markdown", reply_markup=main_menu())
+
+
+@router.message(Command("status", "статус"))
+async def cmd_status(message: Message) -> None:
+    if not message.from_user:
+        return
+    info = store.premium_info(message.from_user.id)
+    used = store.count_ai_today(message.from_user.id)
+    if info["active"]:
+        await message.answer(
+            f"✅ Полный доступ до {info['until'][:10]}",
+            reply_markup=main_menu(),
+        )
+    else:
+        await message.answer(
+            f"Бесплатный режим.\nЖивых прогнозов сегодня: {used}/3\n/dostup — тарифы ⭐",
+            reply_markup=main_menu(),
+        )
+
+
+@router.message(F.text == "ℹ️ Помощь")
+async def btn_help(message: Message) -> None:
+    await cmd_help(message)
+
+
+@router.message(F.text == "⭐ Полный доступ")
+async def btn_prem(message: Message) -> None:
+    await cmd_premium(message)
+
+
+@router.message(F.text == "🌅 День по восходящему")
+async def btn_asc(message: Message) -> None:
+    await _run_asc_day(message)
+
+
+@router.message(F.text.in_(set(BUTTON_TO_SPREAD)))
+async def btn_spread(message: Message) -> None:
+    sid = BUTTON_TO_SPREAD[message.text or ""]
+    q = _last_question.pop(message.from_user.id, None) if message.from_user else None
+    await _run_spread(message, sid, q)
+
+
+@router.callback_query(F.data.startswith("spread:"))
+async def cb_spread(query: CallbackQuery) -> None:
+    sid = (query.data or "").split(":", 1)[1]
+    await query.answer()
+    if query.message:
+        # fake message from user
+        class M:
+            pass
+        # use real message
+        await _run_spread(query.message, sid, None)
 
 
 @router.callback_query(F.data.startswith("buy:"))
@@ -121,60 +380,65 @@ async def successful_payment(message: Message) -> None:
         return
     plan = plan_by_payload(sp.invoice_payload)
     if not plan:
-        await message.answer("Оплата получена, но тариф не распознан. Напишите владельцу.")
+        await message.answer("Оплата получена, но тариф не распознан.")
         return
-
     uid = message.from_user.id
     store.upsert_user(uid, message.from_user.username, message.from_user.first_name)
-    store.record_payment(
-        uid,
-        sp.invoice_payload,
-        int(sp.total_amount),
-        plan["id"],
-        sp.telegram_payment_charge_id or "",
-    )
-
+    store.record_payment(uid, sp.invoice_payload, int(sp.total_amount), plan["id"], sp.telegram_payment_charge_id or "")
     if plan.get("one_shot"):
         store.grant_premium(uid, days=1, plan="deep_once")
-        text = (
-            "⭐ Спасибо! **Глубокий разбор** открыт.\n"
-            "В приложении выберите расклад «Глубокий разбор» "
-            "(сутки расширенного доступа)."
-        )
+        text = "⭐ Спасибо! **Глубокий разбор** открыт на сутки. Выберите расклад «Путь» или «Месяц»."
     else:
         store.grant_premium(uid, days=int(plan["days"]), plan=plan["id"])
-        text = (
-            f"⭐ Спасибо! **Полный доступ** на **{plan['days']} дн.**\n"
-            "Без ограничения прогнозов, неделя и месяц, совместимость, дневник, напоминания."
-        )
-
-    await message.answer(text, parse_mode="Markdown", reply_markup=open_app_inline())
+        text = f"⭐ Спасибо! **Полный доступ** на **{plan['days']} дн.**"
+    await message.answer(text, parse_mode="Markdown", reply_markup=main_menu())
 
 
-@router.message(Command("status", "статус"))
-async def cmd_status(message: Message) -> None:
-    if not message.from_user:
+@router.message(F.text)
+async def text_router(message: Message) -> None:
+    if not message.from_user or not message.text:
         return
-    info = store.premium_info(message.from_user.id)
-    used = store.count_ai_today(message.from_user.id)
-    if info["active"]:
-        await message.answer(
-            f"✅ Полный доступ до {info['until'][:10]}\nТариф: {info['plan']}",
-        )
-    else:
-        await message.answer(
-            f"Бесплатный режим.\nЖивых прогнозов сегодня: {used}/3\n"
-            "/dostup — открыть тарифы ⭐",
-        )
+    uid = message.from_user.id
+    text = message.text.strip()
 
+    # waiting birth data
+    if uid in _waiting_birth:
+        parsed = _parse_birth(text)
+        if not parsed:
+            await message.answer(
+                "Не разобрал формат. Пример:\n`15.06.1990 14:30 Москва`",
+                parse_mode="Markdown",
+                reply_markup=main_menu(),
+            )
+            return
+        date_s, time_s, place = parsed
+        try:
+            from bot.astrology import calculate_ascendant, result_to_dict
 
-@router.message()
-async def fallback(message: Message) -> None:
-    kb = open_app_inline()
-    if kb:
+            result = calculate_ascendant(date_s, time_s, place)
+            data = result_to_dict(result)
+            data["birth_date"] = date_s
+            data["birth_time"] = time_s
+            store.save_profile(uid, data, label="Я", make_default=True)
+            _waiting_birth.discard(uid)
+            await message.answer(
+                f"✅ Восходящий знак: **{data['emoji']} {data['sign']}** "
+                f"({data['degree_in_sign']}°)\n_{data['place']}_",
+                parse_mode="Markdown",
+                reply_markup=main_menu(),
+            )
+            await _run_asc_day(message)
+        except Exception as e:
+            await message.answer(f"Не удалось рассчитать: {e}", reply_markup=main_menu())
+        return
+
+    # free text = question for next spread
+    if len(text) > 2 and not text.startswith("/"):
+        _last_question[uid] = text
         await message.answer(
-            "Все расклады — в приложении 🌸\n/dostup — полный доступ ⭐",
-            reply_markup=kb,
+            f"Вопрос запомнила: «{text[:120]}»\nТеперь выберите расклад кнопкой внизу 👇",
+            reply_markup=main_menu(),
         )
-    else:
-        await message.answer(NO_APP, parse_mode="Markdown")
+        return
+
+    await message.answer("Выберите расклад кнопками внизу 👇", reply_markup=main_menu())

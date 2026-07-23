@@ -29,6 +29,8 @@ async def setup_menu_button(bot) -> None:
         menu_button=MenuButtonWebApp(text="Приложение", web_app=WebAppInfo(url=url))
     )
     logging.getLogger("lenormand").info("Menu → %s", url)
+    # сброс webhook, если раньше ставили — иначе polling не получит апдейты
+    await bot.delete_webhook(drop_pending_updates=False)
 
 
 async def notify_loop(bot) -> None:
@@ -59,13 +61,13 @@ async def notify_loop(bot) -> None:
                 if now.minute > 20:
                     continue
                 try:
-                    from bot.keyboards import open_app_inline
+                    from bot.keyboards import main_menu
 
                     await bot.send_message(
                         u["user_id"],
-                        "🌅 Доброе утро! Ваш день в **Светлом Ленормане** ждёт — карта и восходящий знак.\nОткройте приложение ✨",
+                        "🌅 Доброе утро! Ваш день в **Светлом Ленормане** ждёт — карта дня или день по восходящему 👇",
                         parse_mode="Markdown",
-                        reply_markup=open_app_inline(),
+                        reply_markup=main_menu(),
                     )
                     sent_today.add(key)
                     log.info("notified %s", u["user_id"])
@@ -106,7 +108,9 @@ async def main() -> None:
     me = await bot.get_me()
     log.info("Bot @%s", me.username)
     await setup_menu_button(bot)
+    # delete_webhook already called in setup_menu_button; ensure clean polling
     await bot.delete_webhook(drop_pending_updates=True)
+    log.info("Starting long polling…")
 
     asyncio.create_task(notify_loop(bot))
     await dp.start_polling(bot)
