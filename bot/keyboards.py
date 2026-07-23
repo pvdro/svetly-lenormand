@@ -12,7 +12,6 @@ from aiogram.types import (
     WebAppInfo,
 )
 
-from bot.admin import support_url
 from bot.i18n import t
 from bot.premium import PLANS, TIP_PRESETS
 

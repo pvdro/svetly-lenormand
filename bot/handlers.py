@@ -20,7 +20,7 @@ from aiogram.types import (
 )
 
 from bot import db as store
-from bot.admin import admin_ids, format_stats, is_admin, support_url
+from bot.admin import admin_ids, format_stats, is_admin
 from bot.cards import DECK, draw
 from bot.i18n import normalize_lang, system_prompt, t
 from bot.keyboards import (
