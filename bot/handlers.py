@@ -400,20 +400,19 @@ async def cmd_myid(message: Message) -> None:
     admin_ok = is_admin(u.id)
     admins_set = bool(admin_ids())
     lines = [
-        f"Ваш id: `{u.id}`",
+        f"Ваш id: {u.id}",
         f"Юзернейм: @{u.username or '—'}",
         f"Имя: {u.first_name or '—'}",
         "",
-        f"Доступ владельца: **{'да ✅' if admin_ok else 'нет ❌'}**",
-        f"ADMIN_IDS на сервере: **{'задан' if admins_set else 'не задан'}**",
+        f"Доступ владельца: {'да ✅' if admin_ok else 'нет ❌'}",
+        f"ADMIN_IDS на сервере: {'задан (' + str(len(admin_ids())) + ')' if admins_set else 'не задан'}",
     ]
     if admin_ok:
         lines.append("\nКоманды: /stats · /dostup · /podderzhka")
+        lines.append("В приложении: «Статистика (владелец)» внизу меню")
     else:
-        lines.append(
-            "\n_Чтобы открыть статистику: добавьте этот id в `ADMIN_IDS` на Railway и перезапустите._"
-        )
-    await message.answer("\n".join(lines), parse_mode="Markdown")
+        lines.append("\nДобавьте этот id в ADMIN_IDS на Railway и перезапустите сервис.")
+    await message.answer("\n".join(lines))
 
 
 @router.message(Command("stats", "stat", "статистика", "admin"))
@@ -423,23 +422,23 @@ async def cmd_stats(message: Message) -> None:
     if not is_admin(message.from_user.id):
         await message.answer(
             "📊 Статистика только для владельца.\n\n"
-            f"Ваш id: `{message.from_user.id}`\n"
-            "Напишите /myid — там статус доступа.\n"
-            "Нужно, чтобы этот id был в `ADMIN_IDS` на сервере.",
-            parse_mode="Markdown",
+            f"Ваш id: {message.from_user.id}\n"
+            "Напишите /myid — статус доступа.\n"
+            f"ADMIN_IDS на сервере: {'задан' if admin_ids() else 'НЕ задан'}",
         )
         return
     stats = store.get_usage_stats()
     text = format_stats(stats)
-    # recent users block
     recent = stats.get("recent_users") or []
     if recent:
-        lines = ["\n👤 **Последние пользователи:**"]
+        lines = ["\n👤 Последние пользователи:"]
         for r in recent:
             un = f"@{r['username']}" if r.get("username") else r.get("first_name") or "—"
-            lines.append(f"  · `{r['user_id']}` {un}")
+            lines.append(f"  · {r['user_id']} {un}")
         text += "\n" + "\n".join(lines)
-    await _send_long(message, text, parse_mode="Markdown")
+    # без Markdown — иначе Telegram режет из‑за * _ `
+    plain = text.replace("**", "").replace("__", "").replace("`", "")
+    await _send_long(message, plain)
 
 
 @router.message(Command("podderzhka", "support", "helpme", "поддержка"))

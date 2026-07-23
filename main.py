@@ -109,10 +109,26 @@ async def main() -> None:
 
     me = await bot.get_me()
     log.info("Bot @%s", me.username)
+    from bot.admin import admin_ids, support_username
+
+    log.info("ADMIN_IDS=%s SUPPORT=@%s", admin_ids() or "{}", support_username() or "-")
     await setup_menu_button(bot)
     # delete_webhook already called in setup_menu_button; ensure clean polling
     await bot.delete_webhook(drop_pending_updates=True)
     log.info("Starting long polling…")
+
+    # пинг владельцу при старте (один раз за процесс)
+    for aid in admin_ids():
+        try:
+            await bot.send_message(
+                aid,
+                f"✅ Бот онлайн (@{me.username})\n"
+                f"Админ id: {aid}\n"
+                f"Команды: /stats · /myid · /podderzhka\n"
+                f"Приложение: меню «Приложение» или кнопка на /start",
+            )
+        except Exception as e:
+            log.warning("startup notify admin %s: %s", aid, e)
 
     asyncio.create_task(notify_loop(bot))
     await dp.start_polling(bot)

@@ -103,6 +103,8 @@ class Handler(SimpleHTTPRequestHandler):
                     "bot": "https://t.me/AstoManiabot",
                 },
             )
+        if path == "/api/admin/stats":
+            return self._admin_stats()
         if path == "/api/plans":
             return _json(self, 200, {"plans": list(PLANS.values()), "free_ai_per_day": FREE_AI_READINGS_PER_DAY})
         if path == "/api/me":
@@ -146,6 +148,8 @@ class Handler(SimpleHTTPRequestHandler):
         return user
 
     def _me(self):
+        from bot.admin import is_admin
+
         user = self._require_user()
         if not user:
             return
@@ -165,8 +169,34 @@ class Handler(SimpleHTTPRequestHandler):
                 "free_ai_limit": FREE_AI_READINGS_PER_DAY,
                 "profile": prof,
                 "premium_only": list(PREMIUM_ONLY),
+                "is_owner": is_admin(uid),
             },
         )
+
+    def _admin_stats(self):
+        from bot.admin import format_stats, is_admin
+
+        user = self._require_user()
+        if not user:
+            return
+        if not is_admin(user["id"]):
+            return _json(self, 403, {"error": "Статистика только для владельца"})
+        stats = store.get_usage_stats()
+        text = format_stats(stats)
+        recent = stats.get("recent_users") or []
+        if recent:
+            lines = ["", "Последние пользователи:"]
+            for r in recent:
+                un = f"@{r['username']}" if r.get("username") else r.get("first_name") or "—"
+                lines.append(f"  · {r['user_id']} {un}")
+            text += "\n" + "\n".join(lines)
+        # без markdown для Mini App
+        plain = (
+            text.replace("**", "")
+            .replace("_", "")
+            .replace("`", "")
+        )
+        _json(self, 200, {"ok": True, "stats": stats, "text": plain})
 
     def _history(self):
         user = self._require_user()

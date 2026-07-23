@@ -811,6 +811,33 @@ h3.section-title {
 }
 .question-box {
   margin-bottom: 12px;
+  position: relative;
+  z-index: 2;
+}
+.question-box .field input,
+.draw-question-field input {
+  width: 100%;
+  -webkit-user-select: text;
+  user-select: text;
+  pointer-events: auto;
+}
+.draw-question-field {
+  margin: 12px 0 8px;
+  text-align: left;
+  width: 100%;
+  max-width: 340px;
+}
+.stats-pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: rgba(255,255,255,0.85);
+  border-radius: 18px;
+  padding: 16px;
+  font-size: 13px;
+  line-height: 1.45;
+  box-shadow: var(--shadow-soft);
+  color: var(--ink);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 .pill-mini {
   display: inline-block;

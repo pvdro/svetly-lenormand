@@ -74,7 +74,7 @@
       <div class="question-box">
         <label class="field">
           <span>Ваш вопрос (необязательно)</span>
-          <input type="text" id="global-question" placeholder="Например: что важно в отношениях сейчас?" maxlength="200" />
+          <input type="text" id="global-question" name="question" autocomplete="off" enterkeyhint="done" placeholder="Например: что важно в отношениях сейчас?" maxlength="200" />
         </label>
       </div>
       <div class="spread-grid" id="spread-grid"></div>
@@ -88,6 +88,7 @@
       <button type="button" class="link-row" id="btn-library"><span>📚</span><span>Справочник карт</span><span class="chev">›</span></button>
       <button type="button" class="link-row" id="btn-about"><span>🤍</span><span>О приложении</span><span class="chev">›</span></button>
       <button type="button" class="link-row" id="btn-support"><span>💬</span><span>Поддержка · написать автору</span><span class="chev">›</span></button>
+      <button type="button" class="link-row hidden" id="btn-owner-stats"><span>📊</span><span>Статистика (владелец)</span><span class="chev">›</span></button>
     </section>
 
     <!-- DRAW -->
@@ -97,6 +98,10 @@
         <p class="eyebrow" id="draw-eyebrow">расклад</p>
         <h2 id="draw-title">—</h2>
         <p class="muted" id="draw-blurb"></p>
+        <label class="field draw-question-field">
+          <span>Ваш вопрос</span>
+          <input type="text" id="draw-question" name="draw-question" autocomplete="off" enterkeyhint="done" placeholder="Сформулируйте вопрос к картам…" maxlength="200" />
+        </label>
         <p class="muted" id="draw-q"></p>
         <div class="deck-pile" id="deck-pile">
           <div class="pile-card c1"></div>
@@ -105,6 +110,15 @@
         </div>
         <button type="button" class="primary-btn" id="btn-shuffle"><span id="shuffle-label">Перетасовать и вытянуть</span></button>
       </div>
+    </section>
+
+    <!-- OWNER STATS -->
+    <section id="view-owner-stats" class="view">
+      <button type="button" class="back-btn" data-go="home">← Назад</button>
+      <p class="eyebrow">только вам</p>
+      <h2>📊 Статистика</h2>
+      <pre id="owner-stats-text" class="stats-pre">Загрузка…</pre>
+      <button type="button" class="primary-btn" id="btn-owner-stats-refresh" style="margin-top:12px">Обновить</button>
     </section>
 
     <!-- RESULT -->
@@ -245,8 +259,8 @@
     </section>
   </div>
 
-  <script src="js/config.js"></script>
-  <script src="js/data.js"></script>
-  <script src="js/app.js"></script>
+  <script src="js/config.js?v=20260723b"></script>
+  <script src="js/data.js?v=20260723b"></script>
+  <script src="js/app.js?v=20260723b"></script>
 </body>
 </html>

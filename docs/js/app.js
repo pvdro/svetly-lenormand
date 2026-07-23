@@ -37,6 +37,7 @@
 
   const LS_PROFILE = "svetly_profile_v2";
   const LS_HISTORY = "svetly_history_v2";
+  const LS_QUESTION = "svetly_question_v1";
 
   const views = {
     home: $("#view-home"),
@@ -52,11 +53,48 @@
     library: $("#view-library"),
     card: $("#view-card"),
     about: $("#view-about"),
+    ownerStats: $("#view-owner-stats"),
   };
 
   function initData() {
     if (tg && tg.initData) return tg.initData;
+    // dev fallback only outside Telegram
     return "dev:10001";
+  }
+
+  function getQuestion() {
+    const drawQ = $("#draw-question");
+    const homeQ = $("#global-question");
+    const fromDraw = drawQ && drawQ.value.trim();
+    const fromHome = homeQ && homeQ.value.trim();
+    const q = fromDraw || fromHome || "";
+    return q.slice(0, 200);
+  }
+
+  function setQuestion(q) {
+    const v = (q || "").slice(0, 200);
+    const homeQ = $("#global-question");
+    const drawQ = $("#draw-question");
+    if (homeQ) homeQ.value = v;
+    if (drawQ) drawQ.value = v;
+    try {
+      if (v) localStorage.setItem(LS_QUESTION, v);
+      else localStorage.removeItem(LS_QUESTION);
+    } catch (_) {}
+  }
+
+  function restoreQuestion() {
+    try {
+      const saved = localStorage.getItem(LS_QUESTION) || "";
+      if (saved) setQuestion(saved);
+    } catch (_) {}
+  }
+
+  function setStatus(aiText, premText) {
+    const ai = $("#status-ai");
+    const prem = $("#status-prem");
+    if (ai) ai.textContent = aiText || "—";
+    if (prem) prem.textContent = premText || "·";
   }
 
   function loadLocalProfile() {
@@ -186,41 +224,60 @@
 
   async function refreshMe() {
     const local = loadLocalProfile();
-    if (local && local.sign) {
-      $("#profile-chip").classList.remove("hidden");
-      $("#profile-chip-sign").textContent = `${local.emoji || "✦"} Восходящий ${local.sign}`;
-      $("#profile-chip-meta").textContent = local.place || "";
-      $("#asc-hero-sub").textContent = `Восходящий ${local.sign} — ваш день`;
-      $("#asc-hero-cta").textContent = "Открыть день ↗";
-    }
-
-    if (!(await probeApi())) {
-      $("#status-ai").textContent = "Режим: в приложении";
-      $("#status-prem").textContent = "сервер прогнозов недоступен из сети";
-      me = { premium: { active: false }, free_ai_used: 0, free_ai_limit: 3, profile: local };
-      return;
-    }
-
     try {
-      me = await api("/api/me");
-      const prem = me.premium && me.premium.active;
-      $("#status-ai").textContent = prem
-        ? "Прогноз: без ограничения ⭐"
-        : `Прогнозов сегодня: ${me.free_ai_used}/${me.free_ai_limit}`;
-      $("#status-prem").textContent = prem
-        ? `Полный доступ до ${String(me.premium.until).slice(0, 10)}`
-        : "Бесплатно";
-      if (me.profile && me.profile.sign) {
-        saveLocalProfile(me.profile);
-        $("#profile-chip").classList.remove("hidden");
-        $("#profile-chip-sign").textContent = `${me.profile.emoji || "✦"} Восходящий ${me.profile.sign}`;
-        $("#profile-chip-meta").textContent = me.profile.place || "";
+      if (local && local.sign) {
+        const chip = $("#profile-chip");
+        if (chip) chip.classList.remove("hidden");
+        const s = $("#profile-chip-sign");
+        const m = $("#profile-chip-meta");
+        if (s) s.textContent = `${local.emoji || "✦"} Восходящий ${local.sign}`;
+        if (m) m.textContent = local.place || "";
+        const sub = $("#asc-hero-sub");
+        const cta = $("#asc-hero-cta");
+        if (sub) sub.textContent = `Восходящий ${local.sign} — ваш день`;
+        if (cta) cta.textContent = "Открыть день ↗";
       }
-    } catch (_) {
-      me = { premium: { active: false }, free_ai_used: 0, free_ai_limit: 3, profile: local };
-      $("#status-ai").textContent = "Режим: в приложении";
-      $("#status-prem").textContent = "чат с ботом для оплаты";
+
+      setStatus("Проверяю связь…", "·");
+
+      if (!(await probeApi())) {
+        setStatus("Режим: в приложении", "сервер недоступен — расклады работают локально");
+        me = { premium: { active: false }, free_ai_used: 0, free_ai_limit: 3, profile: local, is_owner: false };
+        toggleOwnerUi(false);
+        return;
+      }
+
+      try {
+        me = await api("/api/me");
+        const prem = me.premium && me.premium.active;
+        setStatus(
+          prem ? "Прогноз: без ограничения ⭐" : `Прогнозов сегодня: ${me.free_ai_used ?? 0}/${me.free_ai_limit ?? 3}`,
+          prem ? `Полный доступ до ${String(me.premium.until).slice(0, 10)}` : "Бесплатно"
+        );
+        toggleOwnerUi(!!me.is_owner);
+        if (me.profile && me.profile.sign) {
+          saveLocalProfile(me.profile);
+          const chip = $("#profile-chip");
+          if (chip) chip.classList.remove("hidden");
+          const s = $("#profile-chip-sign");
+          const m = $("#profile-chip-meta");
+          if (s) s.textContent = `${me.profile.emoji || "✦"} Восходящий ${me.profile.sign}`;
+          if (m) m.textContent = me.profile.place || "";
+        }
+      } catch (_) {
+        me = { premium: { active: false }, free_ai_used: 0, free_ai_limit: 3, profile: local, is_owner: false };
+        setStatus("Режим: в приложении", "нужен вход из Телеграма для сервера");
+        toggleOwnerUi(false);
+      }
+    } catch (e) {
+      setStatus("Режим: в приложении", "ошибка статуса");
+      console.warn("refreshMe", e);
     }
+  }
+
+  function toggleOwnerUi(isOwner) {
+    const btn = $("#btn-owner-stats");
+    if (btn) btn.classList.toggle("hidden", !isOwner);
   }
 
   function renderSpreads() {
@@ -260,26 +317,51 @@
 
   function startSpread(spreadId) {
     const s = (data.spreads || []).find((x) => x.id === spreadId);
-    if (!s) return;
+    if (!s) {
+      alert("Расклад не найден. Обновите приложение.");
+      return;
+    }
     pendingSpread = s;
     lastSpreadId = spreadId;
-    $("#draw-title").textContent = `${s.emoji} ${s.title}`;
-    $("#draw-blurb").textContent = s.blurb;
-    const q = $("#global-question").value.trim();
-    $("#draw-q").textContent = q ? `Вопрос: ${q}` : "";
-    $("#shuffle-label").textContent = "Перетасовать и вытянуть";
-    $("#btn-shuffle").disabled = false;
-    $("#deck-pile").classList.remove("shuffling");
+    const title = $("#draw-title");
+    const blurb = $("#draw-blurb");
+    if (title) title.textContent = `${s.emoji || ""} ${s.title}`.trim();
+    if (blurb) blurb.textContent = s.blurb || "";
+    // синхронизируем вопрос: home → draw
+    const q = getQuestion();
+    setQuestion(q);
+    const drawQhint = $("#draw-q");
+    if (drawQhint) drawQhint.textContent = q ? `Вопрос будет учтён в прогнозе` : "Можно задать вопрос выше";
+    const sh = $("#shuffle-label");
+    if (sh) sh.textContent = "Перетасовать и вытянуть";
+    const btn = $("#btn-shuffle");
+    if (btn) btn.disabled = false;
+    const pile = $("#deck-pile");
+    if (pile) pile.classList.remove("shuffling");
     show("draw");
+    // фокус на вопрос, если пустой — удобнее ввести
+    setTimeout(() => {
+      const dq = $("#draw-question");
+      if (dq && !dq.value.trim()) {
+        try {
+          dq.focus();
+        } catch (_) {}
+      }
+    }, 200);
   }
 
   async function runDraw() {
     if (!pendingSpread) return;
     const btn = $("#btn-shuffle");
-    btn.disabled = true;
-    $("#shuffle-label").textContent = "Тасую…";
-    $("#deck-pile").classList.add("shuffling");
-    const question = $("#global-question").value.trim() || null;
+    if (btn) btn.disabled = true;
+    const sh = $("#shuffle-label");
+    if (sh) sh.textContent = "Тасую…";
+    const pile = $("#deck-pile");
+    if (pile) pile.classList.add("shuffling");
+
+    // финальный вопрос с экрана тасования
+    const question = getQuestion() || null;
+    setQuestion(question || "");
 
     try {
       let r;
@@ -299,14 +381,15 @@
             openPremium(e.message);
             return;
           }
+          console.warn("draw api fail, local fallback", e);
           r = null;
         }
       }
 
       if (!r) {
-        // локальный режим — полноценный Mini App без сервера
-        const deckSrc = pendingSpread.system === "tarot" ? (data.tarot || data.deck) : data.deck;
-        const cards = sample(deckSrc, pendingSpread.n || 3);
+        const deckSrc = pendingSpread.system === "tarot" ? data.tarot || data.deck : data.deck;
+        const n = pendingSpread.n || pendingSpread.n_cards || 3;
+        const cards = sample(deckSrc, n);
         const text = localReadingText(pendingSpread, cards, question);
         r = {
           reading_id: Date.now(),
@@ -326,64 +409,108 @@
           day_key: new Date().toISOString().slice(0, 10),
           cards,
           ai_text: text,
+          question,
         });
       }
 
-      $("#deck-pile").classList.remove("shuffling");
+      // если API не вернул question — подставим свой
+      if (!r.question && question) r.question = question;
+
+      if (pile) pile.classList.remove("shuffling");
       showResult(r);
       refreshMe();
     } catch (e) {
-      $("#deck-pile").classList.remove("shuffling");
+      if (pile) pile.classList.remove("shuffling");
       alert(e.message || "Ошибка");
     } finally {
-      btn.disabled = false;
-      $("#shuffle-label").textContent = "Перетасовать и вытянуть";
+      if (btn) btn.disabled = false;
+      if (sh) sh.textContent = "Перетасовать и вытянуть";
     }
   }
 
   function showResult(r) {
     lastReadingId = r.reading_id;
     lastResultPayload = r;
-    $("#result-title").textContent = `${r.emoji || ""} ${r.title || "Расклад"}`.trim();
-    $("#result-blurb").textContent = r.question ? `Вопрос: ${r.question}` : r.blurb || r.day_key || "";
+    const rt = $("#result-title");
+    if (rt) rt.textContent = `${r.emoji || ""} ${r.title || "Расклад"}`.trim();
+
+    const rb = $("#result-blurb");
+    if (rb) {
+      if (r.question) rb.innerHTML = `<strong>Вопрос:</strong> ${escapeHtml(r.question)}`;
+      else rb.textContent = r.blurb || r.day_key || "";
+    }
+
     const list = $("#result-cards");
-    list.innerHTML = "";
-    const positions = r.positions || [];
-    (r.cards || []).forEach((card, i) => {
-      const el = document.createElement("article");
-      el.className = "reading-card";
-      el.innerHTML = `
-        <div class="pos-label">${positions[i] || "Карта " + (i + 1)}</div>
-        <div class="card-face">
-          <div class="card-visual">
-            <span class="em">${card.emoji}</span>
-            <span class="num">${card.number}</span>
-            <span class="nm">${card.name}</span>
-          </div>
-          <div class="card-body">
-            <h3>${card.name}</h3>
-            <p class="kw">${card.keywords || ""}</p>
-            <p class="txt">${card.general || ""}</p>
-          </div>
-        </div>`;
-      list.appendChild(el);
-    });
+    if (list) {
+      list.innerHTML = "";
+      const positions = r.positions || [];
+      (r.cards || []).forEach((card, i) => {
+        const el = document.createElement("article");
+        el.className = "reading-card";
+        const body = card.general || card.upright || "";
+        el.innerHTML = `
+          <div class="pos-label">${escapeHtml(positions[i] || "Карта " + (i + 1))}</div>
+          <div class="card-face">
+            <div class="card-visual">
+              <span class="em">${card.emoji || "✦"}</span>
+              <span class="num">${card.number != null ? card.number : ""}</span>
+              <span class="nm">${escapeHtml(card.name || "")}</span>
+            </div>
+            <div class="card-body">
+              <h3>${escapeHtml(card.name || "")}</h3>
+              <p class="kw">${escapeHtml(card.keywords || "")}</p>
+              <p class="txt">${escapeHtml(body)}</p>
+            </div>
+          </div>`;
+        list.appendChild(el);
+      });
+    }
 
     const aiBox = $("#ai-box");
-    aiBox.classList.remove("hidden");
-    $("#ai-loading").classList.add("hidden");
-    $("#ai-text").textContent = r.ai_text || "Прогноз появится здесь.";
-    $("#ai-meta").textContent = r.ai
-      ? "живой прогноз"
-      : r.provider === "local"
-        ? "локальный режим (сеть до сервера недоступна)"
-        : "краткий режим";
+    if (aiBox) aiBox.classList.remove("hidden");
+    const aiLoad = $("#ai-loading");
+    if (aiLoad) aiLoad.classList.add("hidden");
+    const aiText = $("#ai-text");
+    if (aiText) aiText.textContent = r.ai_text || "Прогноз появится здесь.";
+    const aiMeta = $("#ai-meta");
+    if (aiMeta) {
+      aiMeta.textContent = r.ai
+        ? "живой прогноз"
+        : r.provider === "local"
+          ? "локальный режим"
+          : "краткий режим";
+    }
 
-    $("#journal-rate").classList.add("hidden");
+    const jr = $("#journal-rate");
+    if (jr) jr.classList.add("hidden");
     show("result");
     try {
       tg && tg.HapticFeedback && tg.HapticFeedback.notificationOccurred("success");
     } catch (_) {}
+  }
+
+  function escapeHtml(s) {
+    return String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  async function loadOwnerStats() {
+    const box = $("#owner-stats-text");
+    if (box) box.textContent = "Загрузка…";
+    show("ownerStats");
+    try {
+      if (!(await probeApi())) {
+        if (box) box.textContent = "Сервер недоступен. Статистика только онлайн.";
+        return;
+      }
+      const r = await api("/api/admin/stats");
+      if (box) box.textContent = r.text || JSON.stringify(r, null, 2);
+    } catch (e) {
+      if (box) box.textContent = e.message || "Нет доступа. Нужен ADMIN_IDS на сервере.";
+    }
   }
 
   async function openDay(kind) {
@@ -751,8 +878,22 @@
   const btnSupportAbout = $("#btn-support-about");
   if (btnSupportAbout) btnSupportAbout.addEventListener("click", openSupport);
 
+  const btnOwner = $("#btn-owner-stats");
+  if (btnOwner) btnOwner.addEventListener("click", loadOwnerStats);
+  const btnOwnerRefresh = $("#btn-owner-stats-refresh");
+  if (btnOwnerRefresh) btnOwnerRefresh.addEventListener("click", loadOwnerStats);
+
+  // синхронизация полей вопроса
+  ["global-question", "draw-question"].forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener("input", () => setQuestion(el.value));
+    el.addEventListener("change", () => setQuestion(el.value));
+  });
+
   $("#btn-compat-go").addEventListener("click", () => {
-    $("#global-question").value = $("#compat-q").value.trim();
+    const cq = $("#compat-q");
+    if (cq) setQuestion(cq.value.trim());
     startSpread("compat");
   });
 
@@ -762,6 +903,8 @@
       if (go === "library") {
         renderLibrary();
         show("library");
+      } else if (go === "ownerStats") {
+        loadOwnerStats();
       } else show(go);
     });
   });
@@ -769,15 +912,16 @@
   async function loadPublicConfig() {
     try {
       if (!(await probeApi())) return;
-      const r = await api("/api/public-config");
+      const r = await fetchWithTimeout(API_BASE + "/api/public-config", {}, 5000).then((x) => x.json());
       if (r.support_username) CFG.SUPPORT_USERNAME = r.support_username;
       if (r.support_bot) CFG.SUPPORT_BOT = r.support_bot;
     } catch (_) {}
   }
 
-  // boot — сразу рисуем UI, без ожидания сети
+  // boot
+  setStatus("Загрузка…", "·");
+  restoreQuestion();
   renderSpreads();
   show("home");
-  loadPublicConfig();
-  refreshMe();
+  loadPublicConfig().finally(() => refreshMe());
 })();
