@@ -118,6 +118,14 @@ async def _send_welcome(message: Message, lang: str, user=None) -> None:
 
     caption = t("welcome", lang, name=name)
     kb = open_app_inline(lang)
+    # сначала убираем старую reply-клавиатуру (текст не может быть пустым!)
+    try:
+        await message.answer(
+            "✨" if lang == "ru" else "✨",
+            reply_markup=main_menu(),
+        )
+    except Exception:
+        pass
     try:
         if WELCOME_IMAGE.exists():
             photo = FSInputFile(str(WELCOME_IMAGE))
@@ -127,7 +135,7 @@ async def _send_welcome(message: Message, lang: str, user=None) -> None:
                 photo,
                 caption=short,
                 parse_mode="Markdown",
-                reply_markup=kb or main_menu(),
+                reply_markup=kb,
             )
             if short != caption:
                 await message.answer(caption, parse_mode="Markdown", reply_markup=kb or main_menu())
@@ -457,8 +465,7 @@ async def cmd_start(message: Message) -> None:
                 except Exception:
                     pass
 
-    # сброс старой нижней клавиатуры + welcome с фото и именем пользователя
-    await message.answer("\u200b", reply_markup=main_menu())
+    # welcome с фото и именем пользователя (сброс reply-клавиатуры — в welcome / main_menu)
     await _send_welcome(message, lang, user=user)
 
     # deep-link actions / spreads → open app with startapp-like hint
