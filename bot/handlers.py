@@ -1,4 +1,4 @@
-"""Бот: Mini App + Premium (Telegram Stars) + уведомления."""
+"""Бот: приложение + полный доступ (звёзды) + уведомления."""
 from __future__ import annotations
 
 import logging
@@ -23,10 +23,6 @@ logger = logging.getLogger(__name__)
 router = Router()
 
 
-def _mini_url() -> str:
-    return (os.getenv("MINIAPP_URL") or "").strip()
-
-
 @router.message(CommandStart())
 async def cmd_start(message: Message) -> None:
     if message.from_user:
@@ -42,13 +38,18 @@ async def cmd_start(message: Message) -> None:
     else:
         await message.answer(NO_APP, parse_mode="Markdown")
 
-    # deep link premium
     args = (message.text or "").split(maxsplit=1)
-    if len(args) > 1 and args[1].strip() in ("premium", "pay", "stars"):
+    if len(args) > 1 and args[1].strip().lower() in (
+        "premium",
+        "pay",
+        "stars",
+        "dostup",
+        "доступ",
+    ):
         await cmd_premium(message)
 
 
-@router.message(Command("app", "open", "menu"))
+@router.message(Command("app", "open", "menu", "приложение"))
 async def cmd_app(message: Message) -> None:
     kb = open_app_inline()
     if kb:
@@ -57,15 +58,19 @@ async def cmd_app(message: Message) -> None:
         await message.answer(NO_APP, parse_mode="Markdown")
 
 
-@router.message(Command("premium", "stars", "pay"))
+@router.message(Command("premium", "stars", "pay", "dostup", "доступ"))
 async def cmd_premium(message: Message) -> None:
     if message.from_user:
-        store.upsert_user(message.from_user.id, message.from_user.username, message.from_user.first_name)
+        store.upsert_user(
+            message.from_user.id,
+            message.from_user.username,
+            message.from_user.first_name,
+        )
         info = store.premium_info(message.from_user.id)
         status = (
-            f"\n\n✅ У вас **Premium** до `{info['until'][:10]}`"
+            f"\n\n✅ У вас **полный доступ** до `{info['until'][:10]}`"
             if info["active"]
-            else "\n\nСейчас: бесплатный тариф."
+            else "\n\nСейчас: бесплатный режим."
         )
     else:
         status = ""
@@ -89,15 +94,14 @@ async def cb_buy(query: CallbackQuery) -> None:
         await query.answer("Тариф не найден", show_alert=True)
         return
     await query.answer()
-    # Telegram Stars invoice
     prices = [LabeledPrice(label=plan["title"], amount=int(plan["stars"]))]
     await query.message.answer_invoice(
         title=plan["title"],
         description=plan["description"],
         payload=plan["payload"],
-        currency="XTR",  # Stars
+        currency="XTR",
         prices=prices,
-        provider_token="",  # empty for Stars
+        provider_token="",
     )
 
 
@@ -117,7 +121,7 @@ async def successful_payment(message: Message) -> None:
         return
     plan = plan_by_payload(sp.invoice_payload)
     if not plan:
-        await message.answer("Оплата получена, но тариф не распознан. Напишите в поддержку.")
+        await message.answer("Оплата получена, но тариф не распознан. Напишите владельцу.")
         return
 
     uid = message.from_user.id
@@ -131,24 +135,23 @@ async def successful_payment(message: Message) -> None:
     )
 
     if plan.get("one_shot"):
-        # one-shot deep: grant 24h mini-premium flag via short premium
         store.grant_premium(uid, days=1, plan="deep_once")
         text = (
-            "⭐ Спасибо! **Глубокий разбор** доступен.\n"
-            "Откройте приложение → расклад «Глубокий разбор» (24 часа доступа к premium-функциям)."
+            "⭐ Спасибо! **Глубокий разбор** открыт.\n"
+            "В приложении выберите расклад «Глубокий разбор» "
+            "(сутки расширенного доступа)."
         )
     else:
         store.grant_premium(uid, days=int(plan["days"]), plan=plan["id"])
         text = (
-            f"⭐ Спасибо! **Premium** активирован на **{plan['days']} дн.**\n"
-            "Безлимит ИИ, неделя/месяц, совместимость, журнал, уведомления."
+            f"⭐ Спасибо! **Полный доступ** на **{plan['days']} дн.**\n"
+            "Без ограничения прогнозов, неделя и месяц, совместимость, дневник, напоминания."
         )
 
-    kb = open_app_inline()
-    await message.answer(text, parse_mode="Markdown", reply_markup=kb)
+    await message.answer(text, parse_mode="Markdown", reply_markup=open_app_inline())
 
 
-@router.message(Command("status"))
+@router.message(Command("status", "статус"))
 async def cmd_status(message: Message) -> None:
     if not message.from_user:
         return
@@ -156,11 +159,12 @@ async def cmd_status(message: Message) -> None:
     used = store.count_ai_today(message.from_user.id)
     if info["active"]:
         await message.answer(
-            f"✅ Premium до {info['until'][:16]} (UTC)\nПлан: {info['plan']}",
+            f"✅ Полный доступ до {info['until'][:10]}\nТариф: {info['plan']}",
         )
     else:
         await message.answer(
-            f"Бесплатный тариф.\nИИ сегодня: {used}/3\n/premium — открыть тарифы ⭐",
+            f"Бесплатный режим.\nЖивых прогнозов сегодня: {used}/3\n"
+            "/dostup — открыть тарифы ⭐",
         )
 
 
@@ -168,6 +172,9 @@ async def cmd_status(message: Message) -> None:
 async def fallback(message: Message) -> None:
     kb = open_app_inline()
     if kb:
-        await message.answer("Все расклады — в приложении 🌸\n/premium — тарифы ⭐", reply_markup=kb)
+        await message.answer(
+            "Все расклады — в приложении 🌸\n/dostup — полный доступ ⭐",
+            reply_markup=kb,
+        )
     else:
         await message.answer(NO_APP, parse_mode="Markdown")

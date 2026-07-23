@@ -89,16 +89,16 @@
       me = await api("/api/me");
       const prem = me.premium && me.premium.active;
       $("#status-ai").textContent = prem
-        ? "ИИ: безлимит ⭐"
-        : `ИИ сегодня: ${me.free_ai_used}/${me.free_ai_limit}`;
+        ? "Прогноз: без ограничения ⭐"
+        : `Прогнозов сегодня: ${me.free_ai_used}/${me.free_ai_limit}`;
       $("#status-prem").textContent = prem
-        ? `Premium до ${String(me.premium.until).slice(0, 10)}`
-        : "Free";
+        ? `Полный доступ до ${String(me.premium.until).slice(0, 10)}`
+        : "Бесплатно";
       if (me.profile && me.profile.sign) {
         $("#profile-chip").classList.remove("hidden");
-        $("#profile-chip-sign").textContent = `${me.profile.emoji || "✦"} ASC ${me.profile.sign}`;
+        $("#profile-chip-sign").textContent = `${me.profile.emoji || "✦"} Восходящий ${me.profile.sign}`;
         $("#profile-chip-meta").textContent = me.profile.place || "";
-        $("#asc-hero-sub").textContent = `ASC ${me.profile.sign} — ваш день с ИИ`;
+        $("#asc-hero-sub").textContent = `Восходящий ${me.profile.sign} — ваш день`;
         $("#asc-hero-cta").textContent = "Открыть день ↗";
       }
     } catch (e) {
@@ -120,7 +120,7 @@
         btn.className = "spread-tile";
         btn.innerHTML = `
           <span class="emoji">${s.emoji}</span>
-          <div class="title">${s.title}${prem ? ' <span class="pill-mini">PRO</span>' : ""}</div>
+          <div class="title">${s.title}${prem ? ' <span class="pill-mini">ПОЛНЫЙ</span>' : ""}</div>
           <div class="meta">${s.n} карт · ${s.blurb}</div>
         `;
         btn.addEventListener("click", () => {
@@ -214,11 +214,11 @@
     if (r.ai_text) {
       $("#ai-text").textContent = r.ai_text;
       $("#ai-meta").textContent = r.ai
-        ? `модель: ${r.provider || ""}${r.model ? " / " + r.model : ""}${r.cached ? " · кэш дня" : ""}`
-        : "офлайн / лимит";
+        ? `${r.cached ? "сохранённый прогноз дня" : "живой прогноз"}${r.provider ? " · " + r.provider : ""}`
+        : "краткий режим / лимит";
     } else if (r.limit) {
-      $("#ai-text").textContent = r.limit.message || "Лимит ИИ на сегодня.";
-      $("#ai-meta").textContent = "откройте Premium ⭐";
+      $("#ai-text").textContent = r.limit.message || "Лимит живых прогнозов на сегодня.";
+      $("#ai-meta").textContent = "откройте полный доступ ⭐";
     } else {
       $("#ai-text").textContent = "Текст появится здесь.";
     }
@@ -281,7 +281,7 @@
       err.classList.remove("hidden");
     } finally {
       $("#btn-calc-asc").disabled = false;
-      $("#calc-label").textContent = "Рассчитать асцендент";
+      $("#calc-label").textContent = "Рассчитать восходящий";
     }
   });
 
@@ -361,13 +361,13 @@
       el.className = "plan-card";
       el.innerHTML = `<div class="title">${p.title}</div>
         <div class="meta">${p.description}</div>
-        <div class="price">⭐ ${p.stars} Stars</div>`;
+        <div class="price">⭐ ${p.stars} звёзд</div>`;
       el.addEventListener("click", () => {
         // open bot for payment
         if (tg && tg.openTelegramLink) {
-          tg.openTelegramLink("https://t.me/AstoManiabot?start=premium");
+          tg.openTelegramLink("https://t.me/AstoManiabot?start=dostup");
         } else {
-          window.open("https://t.me/AstoManiabot?start=premium", "_blank");
+          window.open("https://t.me/AstoManiabot?start=dostup", "_blank");
         }
       });
       box.appendChild(el);
@@ -412,7 +412,7 @@
       const b = $("#compat-b");
       a.innerHTML = b.innerHTML = "";
       if (!profiles.length) {
-        openPremium("Сначала создайте профили (ASC). Совместимость — Premium.");
+        openPremium("Сначала создайте профили (восходящий знак). Совместимость — в полном доступе.");
         show("profile");
         return;
       }

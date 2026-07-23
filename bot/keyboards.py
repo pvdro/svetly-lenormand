@@ -1,4 +1,4 @@
-"""Клавиатуры: Mini App + Premium."""
+"""Клавиатуры бота — русский текст."""
 from __future__ import annotations
 
 import os
@@ -20,12 +20,15 @@ def open_app_inline() -> InlineKeyboardMarkup | None:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="✨ Открыть Светлый Ленорман",
+                    text="✨ Открыть приложение",
                     web_app=WebAppInfo(url=url),
                 )
             ],
             [
-                InlineKeyboardButton(text="⭐ Premium", callback_data="buy:premium_30"),
+                InlineKeyboardButton(
+                    text="⭐ Полный доступ",
+                    callback_data="buy:premium_30",
+                ),
             ],
         ]
     )
@@ -34,13 +37,17 @@ def open_app_inline() -> InlineKeyboardMarkup | None:
 def premium_inline() -> InlineKeyboardMarkup:
     rows = []
     for pid, p in PLANS.items():
-        label = f"⭐ {p['title']} — {p['stars']} Stars"
-        if p.get("badge"):
-            label = f"💎 {p['title']} — {p['stars']} Stars"
+        mark = "💎" if p.get("badge") else "⭐"
+        label = f"{mark} {p['title']} — {p['stars']} зв."
         rows.append([InlineKeyboardButton(text=label, callback_data=f"buy:{pid}")])
     url = miniapp_url()
     if url:
         rows.append(
-            [InlineKeyboardButton(text="✨ Открыть приложение", web_app=WebAppInfo(url=url))]
+            [
+                InlineKeyboardButton(
+                    text="✨ Открыть приложение",
+                    web_app=WebAppInfo(url=url),
+                )
+            ]
         )
     return InlineKeyboardMarkup(inline_keyboard=rows)
