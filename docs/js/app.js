@@ -104,9 +104,12 @@
     tg.ready();
     tg.expand();
     try {
-      tg.setHeaderColor("#FFF8F2");
-      tg.setBackgroundColor("#FFF8F2");
+      // Noir Orchid — совпадает с theme-color
+      tg.setHeaderColor("#07060c");
+      tg.setBackgroundColor("#07060c");
+      if (typeof tg.setBottomBarColor === "function") tg.setBottomBarColor("#07060c");
       tg.MainButton.hide();
+      document.body.classList.add("tg-expanded");
     } catch (_) {}
   }
 
@@ -287,6 +290,11 @@
   function show(name) {
     Object.values(views).forEach((v) => v && v.classList.remove("active"));
     if (views[name]) views[name].classList.add("active");
+    try {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (_) {
+      window.scrollTo(0, 0);
+    }
     window.scrollTo({ top: 0, behavior: "smooth" });
     try {
       tg && tg.HapticFeedback && tg.HapticFeedback.selectionChanged();

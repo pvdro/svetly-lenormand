@@ -3,13 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-  <meta name="theme-color" content="#FFF8F2" />
+  <meta name="theme-color" content="#07060c" />
+  <meta name="color-scheme" content="dark" />
   <title>Астромания</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/app.css?v=20260723p" />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/app.css?v=20260723q" />
 </head>
 <body>
   <div class="bg-orbs" aria-hidden="true">
@@ -22,6 +23,20 @@
     <!-- HOME -->
     <section id="view-home" class="view active">
       <header class="top">
+        <div class="top-chrome">
+          <div class="brand-mark">
+            <div class="monogram" aria-hidden="true">А</div>
+            <div class="brand-mark-text">
+              <span class="brand-name" data-i18n="brand">Астромания</span>
+              <span class="brand-sub" data-i18n="eyebrow">с теплом · без страшилок</span>
+            </div>
+          </div>
+          <div class="lang-bar" id="lang-bar">
+            <button type="button" class="lang-btn active" data-set-lang="ru">RU</button>
+            <button type="button" class="lang-btn" data-set-lang="en">EN</button>
+          </div>
+        </div>
+
         <div class="hero-banner">
           <div class="hero-banner-media">
             <img src="assets/hero.jpg" alt="" class="hero-img" width="1280" height="720" />
@@ -33,10 +48,6 @@
             <p class="hero-hello" id="hero-hello"></p>
             <p class="hero-tagline" data-i18n="tagline">Ленорман · Таро · Солнце · Луна · восходящий</p>
           </div>
-        </div>
-        <div class="lang-bar" id="lang-bar">
-          <button type="button" class="lang-btn active" data-set-lang="ru">RU</button>
-          <button type="button" class="lang-btn" data-set-lang="en">EN</button>
         </div>
         <div class="status-bar" id="status-bar">
           <span id="status-ai" data-i18n="status_loading">Прогноз: …</span>
@@ -50,12 +61,12 @@
           <span class="pill" data-i18n="pill_personal">личное · 1×/день</span>
           <h2 data-i18n="asc_title">Ваша карта рождения</h2>
           <p id="asc-hero-sub" data-i18n="asc_sub">Солнце, Луна и восходящий — опора на сегодня (не прогноз транзитов)</p>
-          <span class="cta" id="asc-hero-cta" data-i18n="asc_cta">Открыть день ↗</span>
+          <span class="cta" id="asc-hero-cta" data-i18n="asc_cta">Открыть стиль дня</span>
         </div>
         <div class="hero-stack" aria-hidden="true">
           <div class="mini-card back"></div>
           <div class="mini-card mid"></div>
-          <div class="mini-card front">🌅</div>
+          <div class="mini-card front">✦</div>
         </div>
       </button>
 
@@ -90,16 +101,18 @@
         <button type="button" class="quick-tile" data-astro-day="asc_day"><span class="emoji">⬆️</span><span data-i18n="q_asc_day">Стиль · Восходящий</span></button>
       </div>
 
-      <button type="button" class="link-row" id="btn-day">
-        <span>☀️</span>
-        <span data-i18n="btn_day">Карта дня · Ленорман (1× в сутки)</span>
-        <span class="chev">›</span>
-      </button>
-      <button type="button" class="link-row" id="btn-tarot-day">
-        <span>🃏</span>
-        <span data-i18n="btn_tarot_day">Карта дня · Таро Райдера–Уэйта</span>
-        <span class="chev">›</span>
-      </button>
+      <div class="menu-block" style="margin-top:18px">
+        <button type="button" class="link-row" id="btn-day">
+          <span>☀️</span>
+          <span data-i18n="btn_day">Карта дня · Ленорман (1× в сутки)</span>
+          <span class="chev">›</span>
+        </button>
+        <button type="button" class="link-row" id="btn-tarot-day">
+          <span>🃏</span>
+          <span data-i18n="btn_tarot_day">Карта дня · Таро Райдера–Уэйта</span>
+          <span class="chev">›</span>
+        </button>
+      </div>
 
       <h3 class="section-title" data-i18n="section_spreads">Расклады · Ленорман и Таро</h3>
       <div class="question-box">
@@ -111,18 +124,23 @@
       <div class="spread-grid" id="spread-grid"></div>
 
       <h3 class="section-title" data-i18n="section_more">Ещё</h3>
-      <button type="button" class="link-row" id="btn-history"><span>📖</span><span data-i18n="btn_history">История</span><span class="chev">›</span></button>
-      <button type="button" class="link-row" id="btn-transits"><span>🌌</span><span data-i18n="btn_transits">Небо на неделю</span><span class="chev">›</span></button>
-      <button type="button" class="link-row" id="btn-journal"><span>📝</span><span data-i18n="btn_journal">Дневник «как сбылось»</span><span class="pill-mini">FULL</span><span class="chev">›</span></button>
-      <button type="button" class="link-row" id="btn-premium"><span>⭐</span><span data-i18n="btn_premium">Полный доступ</span><span class="chev">›</span></button>
-      <button type="button" class="link-row" id="btn-profiles"><span>👤</span><span data-i18n="btn_profiles">Профили</span><span class="chev">›</span></button>
-      <button type="button" class="link-row" id="btn-library"><span>📚</span><span data-i18n="btn_library">Справочник карт</span><span class="chev">›</span></button>
-      <button type="button" class="link-row" id="btn-about"><span>🤍</span><span data-i18n="btn_about">О приложении</span><span class="chev">›</span></button>
-      <button type="button" class="link-row" id="btn-support"><span>💬</span><span data-i18n="btn_support">Поддержка · через бота</span><span class="chev">›</span></button>
-      <button type="button" class="link-row" id="btn-thanks"><span>💛</span><span data-i18n="btn_thanks">Спасибо автору · звёзды</span><span class="chev">›</span></button>
-      <button type="button" class="link-row" id="btn-invite"><span>🎁</span><span data-i18n="btn_invite">Пригласить друга (+прогноз)</span><span class="chev">›</span></button>
-      <button type="button" class="link-row" id="btn-notify"><span>🔔</span><span data-i18n="btn_notify">Утреннее напоминание</span><span class="chev">›</span></button>
-      <button type="button" class="link-row hidden" id="btn-owner-stats"><span>📊</span><span data-i18n="btn_stats">Статистика (владелец)</span><span class="chev">›</span></button>
+      <div class="menu-block">
+        <button type="button" class="link-row" id="btn-history"><span>📖</span><span data-i18n="btn_history">История</span><span class="chev">›</span></button>
+        <button type="button" class="link-row" id="btn-transits"><span>🌌</span><span data-i18n="btn_transits">Небо на неделю</span><span class="chev">›</span></button>
+        <button type="button" class="link-row" id="btn-journal"><span>📝</span><span data-i18n="btn_journal">Дневник «как сбылось»</span><span class="pill-mini">FULL</span><span class="chev">›</span></button>
+        <button type="button" class="link-row" id="btn-premium"><span>⭐</span><span data-i18n="btn_premium">Полный доступ</span><span class="chev">›</span></button>
+        <button type="button" class="link-row" id="btn-profiles"><span>👤</span><span data-i18n="btn_profiles">Профили</span><span class="chev">›</span></button>
+        <button type="button" class="link-row" id="btn-library"><span>📚</span><span data-i18n="btn_library">Справочник карт</span><span class="chev">›</span></button>
+      </div>
+
+      <div class="menu-block" style="margin-top:12px">
+        <button type="button" class="link-row" id="btn-about"><span>🤍</span><span data-i18n="btn_about">О приложении</span><span class="chev">›</span></button>
+        <button type="button" class="link-row" id="btn-support"><span>💬</span><span data-i18n="btn_support">Поддержка · через бота</span><span class="chev">›</span></button>
+        <button type="button" class="link-row" id="btn-thanks"><span>💛</span><span data-i18n="btn_thanks">Спасибо автору · звёзды</span><span class="chev">›</span></button>
+        <button type="button" class="link-row" id="btn-invite"><span>🎁</span><span data-i18n="btn_invite">Пригласить друга (+прогноз)</span><span class="chev">›</span></button>
+        <button type="button" class="link-row" id="btn-notify"><span>🔔</span><span data-i18n="btn_notify">Утреннее напоминание</span><span class="chev">›</span></button>
+        <button type="button" class="link-row hidden" id="btn-owner-stats"><span>📊</span><span data-i18n="btn_stats">Статистика (владелец)</span><span class="chev">›</span></button>
+      </div>
     </section>
 
     <!-- INVITE -->
@@ -223,8 +241,8 @@
     <!-- PROFILE FORM -->
     <section id="view-profile" class="view">
       <button type="button" class="back-btn" data-go="home">← Назад</button>
-      <p class="eyebrow">восходящий знак</p>
-      <h2>Дата, время и место рождения</h2>
+      <p class="eyebrow">карта рождения</p>
+      <h2>Дата, время и место</h2>
       <form id="profile-form" class="profile-form">
         <label class="field"><span>Имя профиля</span><input type="text" id="f-label" value="Я" maxlength="40" /></label>
         <label class="field"><span>Дата рождения</span><input type="date" id="f-date" required /></label>
@@ -232,7 +250,7 @@
         <p class="field-hint">Не знаете точное время — поставьте 12:00 (восходящий знак будет приблизительным).</p>
         <label class="field"><span>Место рождения</span><input type="text" id="f-place" required placeholder="Москва" /></label>
         <p class="form-error hidden" id="form-error"></p>
-        <button type="submit" class="primary-btn" id="btn-calc-asc"><span id="calc-label">Рассчитать восходящий знак</span></button>
+        <button type="submit" class="primary-btn" id="btn-calc-asc"><span id="calc-label">Рассчитать карту</span></button>
       </form>
     </section>
 
@@ -313,6 +331,7 @@
     <!-- ABOUT -->
     <section id="view-about" class="view">
       <button type="button" class="back-btn" data-go="home">← Назад</button>
+      <p class="eyebrow">манифест</p>
       <h2>С теплом</h2>
       <div class="about-card">
         <p><strong>Астромания</strong> — светлые расклады Ленорман и Таро Райдера–Уэйта, большая тройка (Солнце, Луна, восходящий) и тёплый прогноз. Без страшилок.</p>
@@ -329,9 +348,9 @@
     </section>
   </div>
 
-  <script src="js/config.js?v=20260723p"></script>
-  <script src="js/data.js?v=20260723p"></script>
-  <script src="js/i18n.js?v=20260723p"></script>
-  <script src="js/app.js?v=20260723p"></script>
+  <script src="js/config.js?v=20260723q"></script>
+  <script src="js/data.js?v=20260723q"></script>
+  <script src="js/i18n.js?v=20260723q"></script>
+  <script src="js/app.js?v=20260723q"></script>
 </body>
 </html>
