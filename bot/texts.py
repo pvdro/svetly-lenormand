@@ -11,7 +11,7 @@ WELCOME = """
 • День по восходящему  
 • Полный доступ — звёздами Телеграма  
 
-Команды: /dostup · /podderzhka · /help
+При необходимости: /dostup · /podderzhka · /help
 """.strip()
 
 NO_APP = """

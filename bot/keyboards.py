@@ -26,28 +26,20 @@ def main_menu() -> ReplyKeyboardRemove:
 
 
 def open_app_inline() -> InlineKeyboardMarkup | None:
-    """Единственная главная кнопка: открыть Mini App."""
+    """Единственная кнопка в чате: открыть Mini App. Без раскладов."""
     url = miniapp_url()
-    rows: list[list[InlineKeyboardButton]] = []
-    if url:
-        rows.append(
+    if not url:
+        return None
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
             [
                 InlineKeyboardButton(
                     text="✨ Открыть приложение",
                     web_app=WebAppInfo(url=url),
                 )
             ]
-        )
-    # служебные — не расклады
-    rows.append(
-        [
-            InlineKeyboardButton(text="⭐ Полный доступ", callback_data="buy:premium_30"),
-            InlineKeyboardButton(text="💬 Поддержка", callback_data="support:menu"),
         ]
     )
-    if not rows:
-        return None
-    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def support_inline() -> InlineKeyboardMarkup:
