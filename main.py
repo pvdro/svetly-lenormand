@@ -19,18 +19,37 @@ from bot import db as store  # noqa: E402
 
 
 async def setup_menu_button(bot) -> None:
-    """Кнопка Open в чате с ботом (как у Арканума) — MenuButtonWebApp."""
+    """Menu Button у поля ввода + проверка Main Mini App (Open в ленте чатов)."""
     from aiogram.types import MenuButtonWebApp, MenuButtonDefault, WebAppInfo
 
+    log = logging.getLogger("lenormand")
     url = (os.getenv("MINIAPP_URL") or "").strip().rstrip("/")
     if not url:
         await bot.set_chat_menu_button(menu_button=MenuButtonDefault())
-        logging.getLogger("lenormand").warning("MINIAPP_URL empty — menu button reset")
+        log.warning("MINIAPP_URL empty — menu button reset")
         return
-    # Короткое «Open» — так Telegram рисует белую кнопку в списке чатов
+    # Кнопка слева от поля ввода в чате с ботом
     btn = MenuButtonWebApp(text="Open", web_app=WebAppInfo(url=url))
     await bot.set_chat_menu_button(menu_button=btn)
-    logging.getLogger("lenormand").info("Menu Open → %s", url)
+    log.info("Menu Open → %s", url)
+
+    # Open в превью списка чатов = Main Mini App (только через @BotFather)
+    try:
+        me = await bot.get_me()
+        has_main = bool(getattr(me, "has_main_web_app", False))
+        if has_main:
+            log.info("Main Mini App: ON (Open в ленте чатов)")
+        else:
+            log.warning(
+                "Main Mini App: OFF — кнопки Open в списке чатов НЕ будет. "
+                "Включите: @BotFather → /mybots → @%s → Bot Settings → "
+                "Configure Mini App → Enable Mini App → URL: %s",
+                me.username or "bot",
+                url,
+            )
+    except Exception as e:
+        log.warning("getMe main web app check: %s", e)
+
     await bot.delete_webhook(drop_pending_updates=False)
 
 
