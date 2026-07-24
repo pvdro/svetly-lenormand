@@ -45,8 +45,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "✅ Language: English",
     },
     "open_app": {
-        "ru": "✨ Открыть приложение",
-        "en": "✨ Open the app",
+        "ru": "Open",
+        "en": "Open",
     },
     "open_app_hint": {
         "ru": "👇",
@@ -173,8 +173,12 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "💬 Support in the bot",
     },
     "btn_to_app": {
-        "ru": "✨ В приложение",
-        "en": "✨ To the app",
+        "ru": "Open",
+        "en": "Open",
+    },
+    "welcome_short": {
+        "ru": "✨ Добро пожаловать в Астроманию",
+        "en": "✨ Welcome to Astromania",
     },
     "btn_support": {
         "ru": "💬 Поддержка",

@@ -65,7 +65,7 @@ async def on_startup(bot: Bot) -> None:
         return
     os.environ["MINIAPP_URL"] = base
     await bot.set_chat_menu_button(
-        menu_button=MenuButtonWebApp(text="Приложение", web_app=WebAppInfo(url=base))
+        menu_button=MenuButtonWebApp(text="Open", web_app=WebAppInfo(url=base))
     )
     secret = os.getenv("WEBHOOK_SECRET", "").strip() or None
     await bot.set_webhook(

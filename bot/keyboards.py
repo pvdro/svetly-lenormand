@@ -35,21 +35,41 @@ def language_inline() -> InlineKeyboardMarkup:
     )
 
 
-def open_app_inline(lang: str = "ru") -> InlineKeyboardMarkup | None:
+def _app_url(lang: str = "ru") -> str:
     url = miniapp_url()
+    if not url:
+        return ""
+    if "lang=" in url:
+        return url
+    sep = "&" if "?" in url else "?"
+    return f"{url}{sep}lang={lang}"
+
+
+def open_app_button(lang: str = "ru", label: str | None = None) -> InlineKeyboardButton | None:
+    """Одна кнопка Open (web_app) — как у Арканума."""
+    app_url = _app_url(lang)
+    if not app_url:
+        return None
+    return InlineKeyboardButton(
+        text=label or t("open_app", lang),
+        web_app=WebAppInfo(url=app_url),
+    )
+
+
+def open_app_only(lang: str = "ru") -> InlineKeyboardMarkup | None:
+    """Только Open — для короткого welcome / списка чатов."""
+    btn = open_app_button(lang)
+    if not btn:
+        return None
+    return InlineKeyboardMarkup(inline_keyboard=[[btn]])
+
+
+def open_app_inline(lang: str = "ru") -> InlineKeyboardMarkup | None:
+    """Open + язык + доп. действия (после /start)."""
     rows: list[list[InlineKeyboardButton]] = []
-    if url:
-        # lang query so Mini App can pick language
-        sep = "&" if "?" in url else "?"
-        app_url = f"{url}{sep}lang={lang}" if "lang=" not in url else url
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=t("open_app", lang),
-                    web_app=WebAppInfo(url=app_url),
-                )
-            ]
-        )
+    btn = open_app_button(lang)
+    if btn:
+        rows.append([btn])
     rows.append(
         [
             InlineKeyboardButton(text="🇷🇺", callback_data="lang:ru"),

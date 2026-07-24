@@ -29,6 +29,7 @@ from bot.keyboards import (
     language_inline,
     main_menu,
     open_app_inline,
+    open_app_only,
     premium_inline,
     support_inline,
     thanks_inline,
@@ -114,31 +115,23 @@ def _welcome_html(lang: str, name: str) -> str:
     n = _html(name)
     if lang == "en":
         return (
-            f"🌸 <b>Astromania</b>\n\n"
             f"Hi, <b>{n}</b> ✨\n\n"
-            f"Gentle <b>Lenormand</b> and <b>Rider–Waite Tarot</b>,\n"
-            f"plus a personal day by <b>rising sign</b>.\n\n"
-            f"Everything is in the <b>app</b> — button below 👇\n\n"
-            f"• Lenormand &amp; Tarot\n"
-            f"• Day by rising sign\n"
-            f"• Full access with Telegram Stars\n\n"
-            f"Language: /lang · help: /help"
+            f"Gentle <b>Lenormand</b> &amp; <b>Rider–Waite Tarot</b>,\n"
+            f"Sun · Moon · rising.\n\n"
+            f"Tap <b>Open</b> — the whole app is inside Telegram.\n\n"
+            f"/lang · /help · /premium"
         )
     return (
-        f"🌸 <b>Астромания</b>\n\n"
         f"Привет, <b>{n}</b> ✨\n\n"
-        f"Светлые расклады <b>Ленорман</b> и <b>Таро Райдера–Уэйта</b>,\n"
-        f"день по <b>восходящему знаку</b>.\n\n"
-        f"Всё внутри <b>приложения</b> — кнопка ниже 👇\n\n"
-        f"• Ленорман и Таро\n"
-        f"• День по восходящему знаку\n"
-        f"• Полный доступ — звёздами Телеграма\n\n"
-        f"Язык: /lang · помощь: /help"
+        f"Светлые расклады <b>Ленорман</b> и <b>Таро</b>,\n"
+        f"Солнце · Луна · восходящий.\n\n"
+        f"Жмите <b>Open</b> — всё приложение внутри Telegram.\n\n"
+        f"/lang · /help · /dostup"
     )
 
 
 async def _send_welcome(message: Message, lang: str, user=None) -> None:
-    """Красивое фото + приветствие с именем пользователя + кнопка приложения."""
+    """Как у Арканума: короткое «Добро пожаловать» + кнопка Open, затем чуть подробнее."""
     person = user or message.from_user
     if person and getattr(person, "is_bot", False):
         person = user
@@ -146,23 +139,23 @@ async def _send_welcome(message: Message, lang: str, user=None) -> None:
     if not name or name.lower() in ("астромания", "astromania"):
         name = t("fallback_name", lang)
 
+    # 1) Короткое сообщение — в списке чатов видно «✨ Добро пожаловать…» + Open
+    short = t("welcome_short", lang)
+    kb_open = open_app_only(lang) or open_app_inline(lang)
+    await message.answer(short, reply_markup=kb_open or main_menu())
+
+    # 2) Фото + подробности (если есть картинка)
     caption = _welcome_html(lang, name)
     kb = open_app_inline(lang)
     try:
         if WELCOME_IMAGE.exists():
             photo = FSInputFile(str(WELCOME_IMAGE))
-            short = caption if len(caption) <= 1000 else (
-                f"🌸 <b>Astromania</b> · <b>{_html(name)}</b>" if lang == "en"
-                else f"🌸 <b>Астромания</b> · <b>{_html(name)}</b>"
-            )
             await message.answer_photo(
                 photo,
-                caption=short,
+                caption=caption if len(caption) <= 1024 else caption[:1000] + "…",
                 parse_mode="HTML",
                 reply_markup=kb or main_menu(),
             )
-            if short != caption:
-                await message.answer(caption, parse_mode="HTML", reply_markup=kb or main_menu())
             return
     except Exception as e:
         logger.warning("welcome photo: %s", e)

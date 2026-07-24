@@ -19,16 +19,18 @@ from bot import db as store  # noqa: E402
 
 
 async def setup_menu_button(bot) -> None:
+    """Кнопка Open в чате с ботом (как у Арканума) — MenuButtonWebApp."""
     from aiogram.types import MenuButtonWebApp, MenuButtonDefault, WebAppInfo
 
-    url = os.getenv("MINIAPP_URL", "").strip()
+    url = (os.getenv("MINIAPP_URL") or "").strip().rstrip("/")
     if not url:
         await bot.set_chat_menu_button(menu_button=MenuButtonDefault())
+        logging.getLogger("lenormand").warning("MINIAPP_URL empty — menu button reset")
         return
-    await bot.set_chat_menu_button(
-        menu_button=MenuButtonWebApp(text="App / Приложение", web_app=WebAppInfo(url=url))
-    )
-    logging.getLogger("lenormand").info("Menu → %s", url)
+    # Короткое «Open» — так Telegram рисует белую кнопку в списке чатов
+    btn = MenuButtonWebApp(text="Open", web_app=WebAppInfo(url=url))
+    await bot.set_chat_menu_button(menu_button=btn)
+    logging.getLogger("lenormand").info("Menu Open → %s", url)
     await bot.delete_webhook(drop_pending_updates=False)
 
 
